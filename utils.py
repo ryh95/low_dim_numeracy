@@ -123,3 +123,7 @@ def is_number(s):
 def is_valid_triple(triple):
     x,xp,xm = triple
     return abs(x-xp) < abs(x-xm)
+
+def is_valid_relax_triple(triple):
+    x, xp, xm = triple
+    return abs(x - xp) <= abs(x - xm)
