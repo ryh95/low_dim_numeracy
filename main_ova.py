@@ -25,6 +25,7 @@ d = 300 # todo: auto derive the d
 emb_xs_name = join(EMB_DIR,emb_fname+'_ova_x')
 emb_xps_name = join(EMB_DIR,emb_fname+'_ova_xp')
 emb_xms_name = join(EMB_DIR,emb_fname+'_ova_xm')
+emb_num_name = join(EMB_DIR,emb_fname+'_ova_all')
 base_emb = join(EMB_DIR,emb_fname+'.txt')
 
 if isfile(emb_xs_name+'.npy') and isfile(emb_xps_name+'.npy') and isfile(emb_xms_name+'.npy'):
@@ -39,10 +40,14 @@ else:
 
     # collect all number embedding
     number_set = set(np.array(Xss).flat)
-    number_array = np.zeros(len(number_set),dtype=str)
-    number_array[:-1] = np.array(number_set - set([math.inf])).astype(int).astype(str)
-    number_array[-1] = str(math.inf)
-    number_emb_dict,_ = vocab2vec(number_array, EMB_DIR, emb_xms_name, base_emb, ['pickle','npy'])
+    number_set.remove(math.inf)
+    number_array = [str(int(n)) for n in number_set]
+    number_array.append(str(math.inf))
+    if os.path.isfile(emb_num_name+'.pickle'):
+        with open(emb_num_name+'.pickle','rb') as f:
+            number_emb_dict = pickle.load(f)
+    else:
+        number_emb_dict,_ = vocab2vec(number_array, EMB_DIR, emb_num_name, base_emb, ['pickle','npy'])
 
     xs,xps = [],[]
     n_ova = len(Xss[0])
@@ -58,18 +63,21 @@ else:
             else:
                 P_xms[i,:,j] = number_emb_dict[str(xm)]
 
-        if Xs[0].is_integer():
-            P_x[i,:] = number_emb_dict[str(int(Xs[0]))]
+        if Xs[0][0].is_integer():
+            P_x[i,:] = number_emb_dict[str(int(Xs[0][0]))]
         else:
-            P_x[i,:] = number_emb_dict[str(Xs[0])]
-        if Xs[1].is_integer():
-            P_xp[i,:] = number_emb_dict[str(int(Xs[1]))]
+            P_x[i,:] = number_emb_dict[str(Xs[0][0])]
+        if Xs[0][1].is_integer():
+            P_xp[i,:] = number_emb_dict[str(int(Xs[0][1]))]
         else:
-            P_xp[i,:] = number_emb_dict[str(Xs[1])]
+            P_xp[i,:] = number_emb_dict[str(Xs[0][1])]
 
         # xs.append(str(x))
         # xps.append(str(xp))
         # xms.append(str(xm))
+    np.save(emb_xs_name+'.npy',P_x)
+    np.save(emb_xps_name+'.npy',P_xp)
+    np.save(emb_xms_name+'.npy',P_xms)
 
 # calculate the original accuracy
 Dp = LA.norm(P_x - P_xp,axis=1)
@@ -80,17 +88,24 @@ print('original acc: ',acc)
 # model
 
 # w = torch.nn.Parameter(torch.randn(d))
+# w = torch.randn(d,requires_grad=True,device='cuda')
 w = torch.randn(d,requires_grad=True)
+w.data = w.data/torch.norm(w).data
+
 n_epochs = 1000
 
-beta = 4
-lr = 0.5
-optimizer = torch.optim.Adam([w],lr)
+beta = 6
+lr = 0.8
+
+# P_x = torch.tensor(P_x,dtype=torch.float).cuda()
 P_x = torch.tensor(P_x,dtype=torch.float)
 P_xp = torch.tensor(P_xp,dtype=torch.float)
 P_xms = torch.tensor(P_xms,dtype=torch.float)
-pre_acc = -inf
 
+optimizer = torch.optim.Adam([w],lr)
+
+pre_acc = -inf
+n_tests = P_x.shape[0]
 # dp = torch.abs(torch.matmul(w/torch.norm(w),P_x-P_xp))
 # dm = torch.abs(torch.matmul(w/torch.norm(w),P_x-P_xm))
 #
@@ -98,9 +113,9 @@ pre_acc = -inf
 # print('specialized init acc: ',acc)
 
 for t in range(n_epochs):
-
-    dp = torch.abs(torch.matmul(P_x-P_xp,w/torch.norm(w)))
-    dm = torch.min(torch.abs(torch.matmul(w/torch.norm(w),P_x[:,:,None]-P_xms)),dim=1)
+    print('epoch number: ',t)
+    dp = torch.abs(torch.matmul(P_x-P_xp,w))
+    dm = torch.min(torch.abs(torch.matmul(w,P_x[:,:,None]-P_xms)),dim=1)[0]
 
     objs = soft_indicator(dm-dp,beta)
     loss = -torch.sum(objs)
@@ -109,7 +124,7 @@ for t in range(n_epochs):
 
     loss.backward()
 
-    acc = float(torch.sum(dp < dm)) / n_tests
+    acc = float(torch.sum(dp <= dm)) / n_tests
     if acc > pre_acc:
         best_w = w.clone()
         pre_acc = acc
@@ -119,10 +134,13 @@ for t in range(n_epochs):
 
     optimizer.step()
 
+    # project the variables back to the feasible set
+    w.data = w.data / torch.norm(w).data
+
 # todo: test the direction vector
 # best_w = torch.load('w.pt')
-dp = torch.abs(torch.matmul(P_x-P_xp,best_w/torch.norm(best_w)))
-dm = torch.min(torch.abs(torch.matmul(best_w/torch.norm(best_w),P_x[:,:,None]-P_xms)),dim=1)
+dp = torch.abs(torch.matmul(P_x-P_xp,best_w))
+dm = torch.min(torch.abs(torch.matmul(best_w,P_x[:,:,None]-P_xms)),dim=1)[0]
 
-best_acc = float(torch.sum(dp < dm)) / n_tests
+best_acc = float(torch.sum(dp <= dm)) / n_tests
 print('best acc: ',best_acc)

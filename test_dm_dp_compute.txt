@@ -1,0 +1,7 @@
+emb_x = number_emb_dict['-1']
+emb_xp = number_emb_dict['-2']
+torch.min(torch.abs(torch.matmul(w,P_x[:,:,None]-P_xms)),dim=1)
+Xss[1][78]
+emb_xms_min = number_emb_dict['78']
+np.dot(w.detach().numpy(),emb_x-emb_xp)
+np.dot(w.detach().numpy(),emb_x-emb_xms_min)
