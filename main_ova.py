@@ -82,8 +82,11 @@ else:
 # calculate the original accuracy
 Dp = LA.norm(P_x - P_xp,axis=1)
 Dm = LA.norm(P_x[:,:,None] - P_xms,axis=1).min(axis=1)
+
+I_hat = torch.sum(soft_indicator(torch.tensor(Dm - Dp, dtype=torch.float), beta=40))
 acc = sum(Dp <= Dm) / Dp.size
 print('original acc: ',acc)
+print('original I_hat: ', -I_hat)
 
 # model
 
@@ -92,10 +95,10 @@ print('original acc: ',acc)
 w = torch.randn(d,requires_grad=True)
 w.data = w.data/torch.norm(w).data
 
-n_epochs = 1000
+n_epochs = 80
 
-beta = 6
-lr = 0.8
+beta = 40
+lr = 0.5
 
 # P_x = torch.tensor(P_x,dtype=torch.float).cuda()
 P_x = torch.tensor(P_x,dtype=torch.float)
@@ -104,13 +107,21 @@ P_xms = torch.tensor(P_xms,dtype=torch.float)
 
 optimizer = torch.optim.Adam([w],lr)
 
-pre_acc = -inf
+init_acc = -inf
+init_loss = inf
 n_tests = P_x.shape[0]
+
 # dp = torch.abs(torch.matmul(w/torch.norm(w),P_x-P_xp))
 # dm = torch.abs(torch.matmul(w/torch.norm(w),P_x-P_xm))
 #
 # acc = float(torch.sum(dp < dm)) / n
 # print('specialized init acc: ',acc)
+dp = torch.abs(torch.matmul(P_x-P_xp,w))
+dm = torch.min(torch.abs(torch.matmul(w,P_x[:,:,None]-P_xms)),dim=1)[0]
+#
+objs = soft_indicator(dm-dp,beta)
+loss = -torch.sum(objs)
+print('init specialized I_hat: ',loss)
 
 for t in range(n_epochs):
     print('epoch number: ',t)
@@ -125,22 +136,30 @@ for t in range(n_epochs):
     loss.backward()
 
     acc = float(torch.sum(dp <= dm)) / n_tests
-    if acc > pre_acc:
+    if acc > init_acc:
         best_w = w.clone()
-        pre_acc = acc
+        init_acc = acc
         # print(best_w)
         print('specialized acc: ', acc)
         torch.save(w, 'w_ova.pt')
+
+    # if loss < init_loss:
+    #     best_w = w.clone()
+    #     init_loss = loss
+    #     print('specialized I_hat: ', loss)
+    #     torch.save(w, 'w_ova.pt')
 
     optimizer.step()
 
     # project the variables back to the feasible set
     w.data = w.data / torch.norm(w).data
 
-# todo: test the direction vector
 # best_w = torch.load('w.pt')
+
 dp = torch.abs(torch.matmul(P_x-P_xp,best_w))
 dm = torch.min(torch.abs(torch.matmul(best_w,P_x[:,:,None]-P_xms)),dim=1)[0]
-
+objs = soft_indicator(dm-dp,beta)
+loss = -torch.sum(objs)
 best_acc = float(torch.sum(dp <= dm)) / n_tests
 print('best acc: ',best_acc)
+print('best specialized I_hat: ',loss)
