@@ -17,7 +17,14 @@ def soft_indicator(x,beta):
     :param beta: the larger the beta,
     :return:
     """
-    return (1 + torch.exp(-beta*x)) ** (-1)
+
+    # important: the element order of z is not the same with that in x
+    y_pos = torch.exp(-beta*x[x>=0])
+    z_pos = (1 + y_pos) ** (-1)
+    y_neg = torch.exp(beta * x[x<0])
+    z_neg = 1 - (1 + y_neg) ** (-1)
+
+    return torch.cat((z_pos,z_neg))
 
 def vocab2vec(vocab, output_dir, output_name, word_emb, savefmt, type='glove', normalize=False, oov_handle='random'):
     """

@@ -10,6 +10,8 @@ from os.path import join, isfile
 from numpy import linalg as LA
 
 import torch
+from torch import autograd
+from torch.utils.data import TensorDataset, DataLoader
 
 from config import EMB_DIR
 from utils import soft_indicator, vocab2vec
@@ -80,86 +82,111 @@ else:
     np.save(emb_xms_name+'.npy',P_xms)
 
 # calculate the original accuracy
+batch_size = P_x.shape[0]
+beta = 80
+
 Dp = LA.norm(P_x - P_xp,axis=1)
 Dm = LA.norm(P_x[:,:,None] - P_xms,axis=1).min(axis=1)
 
-I_hat = torch.sum(soft_indicator(torch.tensor(Dm - Dp, dtype=torch.float), beta=40))
-acc = sum(Dp <= Dm) / Dp.size
+I_hat = float(torch.sum(soft_indicator(torch.tensor(Dm - Dp, dtype=torch.float), beta=beta)))/batch_size
+acc = sum(Dp <= Dm) / batch_size
 print('original acc: ',acc)
 print('original I_hat: ', -I_hat)
 
 # model
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # w = torch.nn.Parameter(torch.randn(d))
-# w = torch.randn(d,requires_grad=True,device='cuda')
-w = torch.randn(d,requires_grad=True)
+w = torch.randn(d,requires_grad=True,device=device)
+# w = torch.randn(d,requires_grad=True)
 w.data = w.data/torch.norm(w).data
 
-n_epochs = 80
+n_epochs = 20
 
-beta = 40
-lr = 0.5
+lr = 0.002
 
-# P_x = torch.tensor(P_x,dtype=torch.float).cuda()
-P_x = torch.tensor(P_x,dtype=torch.float)
-P_xp = torch.tensor(P_xp,dtype=torch.float)
-P_xms = torch.tensor(P_xms,dtype=torch.float)
+P_x = torch.from_numpy(P_x).float()
+P_xp = torch.from_numpy(P_xp).float()
+P_xms = torch.from_numpy(P_xms).float()
+train_data = TensorDataset(P_x,P_xp,P_xms)
 
 optimizer = torch.optim.Adam([w],lr)
 
 init_acc = -inf
 init_loss = inf
-n_tests = P_x.shape[0]
 
-# dp = torch.abs(torch.matmul(w/torch.norm(w),P_x-P_xp))
-# dm = torch.abs(torch.matmul(w/torch.norm(w),P_x-P_xm))
-#
-# acc = float(torch.sum(dp < dm)) / n
-# print('specialized init acc: ',acc)
-dp = torch.abs(torch.matmul(P_x-P_xp,w))
-dm = torch.min(torch.abs(torch.matmul(w,P_x[:,:,None]-P_xms)),dim=1)[0]
-#
-objs = soft_indicator(dm-dp,beta)
-loss = -torch.sum(objs)
+
+def evaluate_w(P_x,P_xp,P_xms,mini_batch_size,w):
+    train_data = TensorDataset(P_x, P_xp, P_xms)
+    mini_batchs = DataLoader(train_data,batch_size=mini_batch_size,shuffle=True,num_workers=8)
+    loss,acc = 0,0
+    for mini_batch in mini_batchs:
+        mini_P_x, mini_P_xp, mini_P_xms = mini_batch
+        dp = torch.abs(torch.matmul(mini_P_x-mini_P_xp,w.cpu()))
+        dm = torch.min(torch.abs(torch.matmul(w.cpu(),mini_P_x[:,:,None]-mini_P_xms)),dim=1)[0]
+        #
+        objs = soft_indicator(dm-dp,beta)
+        loss += -torch.sum(objs).item()
+        acc += torch.sum(dp<=dm).item()
+    batch_size = P_x.shape[0]
+    return acc/batch_size,loss/batch_size
+
+mini_batch_size = 128
+
+acc,loss = evaluate_w(P_x,P_xp,P_xms,mini_batch_size,w)
+print('init specialized acc: ',acc)
 print('init specialized I_hat: ',loss)
 
+mini_batchs = DataLoader(train_data,batch_size=mini_batch_size,shuffle=True,num_workers=8)
+
 for t in range(n_epochs):
-    print('epoch number: ',t)
-    dp = torch.abs(torch.matmul(P_x-P_xp,w))
-    dm = torch.min(torch.abs(torch.matmul(w,P_x[:,:,None]-P_xms)),dim=1)[0]
 
-    objs = soft_indicator(dm-dp,beta)
-    loss = -torch.sum(objs)
-    # print(loss)
-    optimizer.zero_grad()
+    print('epoch number: ', t)
 
-    loss.backward()
+    for i,mini_batch in enumerate(mini_batchs):
 
-    acc = float(torch.sum(dp <= dm)) / n_tests
-    if acc > init_acc:
-        best_w = w.clone()
-        init_acc = acc
-        # print(best_w)
-        print('specialized acc: ', acc)
-        torch.save(w, 'w_ova.pt')
+        mini_P_x, mini_P_xp, mini_P_xms = mini_batch
+        mini_P_x = mini_P_x.to(device)
+        mini_P_xp = mini_P_xp.to(device)
+        mini_P_xms = mini_P_xms.to(device)
 
-    # if loss < init_loss:
-    #     best_w = w.clone()
-    #     init_loss = loss
-    #     print('specialized I_hat: ', loss)
-    #     torch.save(w, 'w_ova.pt')
+        dp = torch.abs(torch.matmul(mini_P_x-mini_P_xp,w))
+        dm = torch.min(torch.abs(torch.matmul(w,mini_P_x[:,:,None]-mini_P_xms)),dim=1)[0]
 
-    optimizer.step()
+        objs = soft_indicator(dm-dp,beta)
+        loss = -torch.mean(objs)
+        # print(loss)
+        optimizer.zero_grad()
 
-    # project the variables back to the feasible set
-    w.data = w.data / torch.norm(w).data
+        with autograd.detect_anomaly():
+            # avoid nan gradient
+            loss.backward()
+
+        # evaluate
+        if i % 10 == 0:
+            # acc = float(torch.sum(dp <= dm)) / batch_size
+            acc,_ = evaluate_w(P_x,P_xp,P_xms,mini_batch_size,w)
+            print("epochs :{}, acc :{} , iteration: {},".format(t, acc, i))
+            if acc > init_acc:
+                best_w = w.clone()
+                init_acc = acc
+                # print(best_w)
+                print('specialized acc: ', acc)
+                torch.save(w, 'w_ova.pt')
+
+        # if loss < init_loss:
+        #     best_w = w.clone()
+        #     init_loss = loss
+        #     print('specialized I_hat: ', loss)
+        #     torch.save(w, 'w_ova.pt')
+
+        optimizer.step()
+
+        # project the variables back to the feasible set
+        w.data = w.data / torch.norm(w).data
 
 # best_w = torch.load('w.pt')
 
-dp = torch.abs(torch.matmul(P_x-P_xp,best_w))
-dm = torch.min(torch.abs(torch.matmul(best_w,P_x[:,:,None]-P_xms)),dim=1)[0]
-objs = soft_indicator(dm-dp,beta)
-loss = -torch.sum(objs)
-best_acc = float(torch.sum(dp <= dm)) / n_tests
+best_acc,best_loss = evaluate_w(P_x,P_xp,P_xms,mini_batch_size,best_w)
 print('best acc: ',best_acc)
-print('best specialized I_hat: ',loss)
+print('best specialized I_hat: ',best_loss)
