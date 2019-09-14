@@ -97,9 +97,12 @@ print('original I_hat: ', -I_hat)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # w = torch.nn.Parameter(torch.randn(d))
-w = torch.randn(d,requires_grad=True,device=device)
+dim = 2
+W = torch.randn((dim,d),requires_grad=True,device=device)
 # w = torch.randn(d,requires_grad=True)
-w.data = w.data/torch.norm(w).data
+# w.data = w.data/torch.norm(w).data
+torch.nn.init.orthogonal_(W)
+W = W.T # col orthognol
 
 n_epochs = 20
 
@@ -116,14 +119,14 @@ init_acc = -inf
 init_loss = inf
 
 
-def evaluate_w(P_x,P_xp,P_xms,mini_batch_size,w):
+def evaluate_w(P_x,P_xp,P_xms,mini_batch_size,W):
     train_data = TensorDataset(P_x, P_xp, P_xms)
     mini_batchs = DataLoader(train_data,batch_size=mini_batch_size,shuffle=True,num_workers=8)
     loss,acc = 0,0
     for mini_batch in mini_batchs:
         mini_P_x, mini_P_xp, mini_P_xms = mini_batch
-        dp = torch.abs(torch.matmul(mini_P_x-mini_P_xp,w.cpu()))
-        dm = torch.min(torch.abs(torch.matmul(w.cpu(),mini_P_x[:,:,None]-mini_P_xms)),dim=1)[0]
+        dp = torch.norm(torch.matmul(mini_P_x-mini_P_xp,W.cpu()))
+        dm = torch.min(torch.norm(torch.matmul(W.cpu(),mini_P_x[:,:,None]-mini_P_xms)),dim=1)[0]
         #
         objs = soft_indicator(dm-dp,beta)
         loss += -torch.sum(objs).item()
@@ -150,8 +153,8 @@ for t in range(n_epochs):
         mini_P_xp = mini_P_xp.to(device)
         mini_P_xms = mini_P_xms.to(device)
 
-        dp = torch.abs(torch.matmul(mini_P_x-mini_P_xp,w))
-        dm = torch.min(torch.abs(torch.matmul(w,mini_P_x[:,:,None]-mini_P_xms)),dim=1)[0]
+        dp = torch.norm(torch.matmul(mini_P_x-mini_P_xp,W))
+        dm = torch.min(torch.norm(torch.matmul(W,mini_P_x[:,:,None]-mini_P_xms)),dim=1)[0]
 
         objs = soft_indicator(dm-dp,beta)
         loss = -torch.mean(objs)
@@ -168,11 +171,11 @@ for t in range(n_epochs):
             acc,_ = evaluate_w(P_x,P_xp,P_xms,mini_batch_size,w)
             print("epochs :{}, acc :{} , iteration: {},".format(t, acc, i))
             if acc > init_acc:
-                best_w = w.clone()
+                best_w = W.clone()
                 init_acc = acc
                 # print(best_w)
                 print('specialized acc: ', acc)
-                torch.save(w, 'w_ova.pt')
+                torch.save(W, 'w_ova.pt')
 
         # if loss < init_loss:
         #     best_w = w.clone()
@@ -183,7 +186,16 @@ for t in range(n_epochs):
         optimizer.step()
 
         # project the variables back to the feasible set
-        w.data = w.data / torch.norm(w).data
+        # w.data = w.data / torch.norm(w).data
+
+        # find the nearest col orthogonal matrix
+        # ref: http://people.csail.mit.edu/bkph/articles/Nearest_Orthonormal_Matrix.pdf
+        # ref: https://math.stackexchange.com/q/2500881
+        # todo: may have the nan problem, solve it
+        W.data = W.data @ ((W.data.T @ W.data) ** (-0.5))
+        assert not torch.isnan(W.data).any(),'W has nan values'
+
+
 
 # best_w = torch.load('w.pt')
 
