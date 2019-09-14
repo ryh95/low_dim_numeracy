@@ -113,7 +113,7 @@ P_xp = torch.from_numpy(P_xp).float()
 P_xms = torch.from_numpy(P_xms).float()
 train_data = TensorDataset(P_x,P_xp,P_xms)
 
-optimizer = torch.optim.Adam([w],lr)
+optimizer = torch.optim.Adam([W],lr)
 
 init_acc = -inf
 init_loss = inf
@@ -136,7 +136,7 @@ def evaluate_w(P_x,P_xp,P_xms,mini_batch_size,W):
 
 mini_batch_size = 128
 
-acc,loss = evaluate_w(P_x,P_xp,P_xms,mini_batch_size,w)
+acc,loss = evaluate_w(P_x,P_xp,P_xms,mini_batch_size,W)
 print('init specialized acc: ',acc)
 print('init specialized I_hat: ',loss)
 
@@ -168,7 +168,7 @@ for t in range(n_epochs):
         # evaluate
         if i % 10 == 0:
             # acc = float(torch.sum(dp <= dm)) / batch_size
-            acc,_ = evaluate_w(P_x,P_xp,P_xms,mini_batch_size,w)
+            acc,_ = evaluate_w(P_x,P_xp,P_xms,mini_batch_size,W)
             print("epochs :{}, acc :{} , iteration: {},".format(t, acc, i))
             if acc > init_acc:
                 best_w = W.clone()
