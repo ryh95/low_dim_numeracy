@@ -68,6 +68,7 @@ print('original acc: ',acc)
 d = 300
 # w = torch.nn.Parameter(torch.randn(d))
 w = torch.randn(d,requires_grad=True)
+w.data = w.data/torch.norm(w).data
 n_epochs = 1000
 
 beta = 4
@@ -87,8 +88,8 @@ pre_acc = -inf
 
 for t in range(n_epochs):
 
-    dp = torch.abs(torch.matmul(w/torch.norm(w),P_x-P_xp))
-    dm = torch.abs(torch.matmul(w/torch.norm(w),P_x-P_xm))
+    dp = torch.abs(torch.matmul(w,P_x-P_xp))
+    dm = torch.abs(torch.matmul(w,P_x-P_xm))
 
     objs = soft_indicator(dm-dp,beta)
     loss = -torch.sum(objs)
@@ -106,6 +107,7 @@ for t in range(n_epochs):
         torch.save(w, 'w.pt')
 
     optimizer.step()
+    w.data = w.data / torch.norm(w).data
 
 # todo: test the direction vector
 # best_w = torch.load('w.pt')

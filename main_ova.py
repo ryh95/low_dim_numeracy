@@ -22,7 +22,7 @@ with open('data/ovamag.pkl','rb') as f:
 # TODO: check the data, whether the property p is satisfied
 
 type = 'glove'
-emb_fname = 'glove.6B.300d'
+emb_fname = 'glove.6B.300d' # random
 d = 300 # todo: auto derive the d
 emb_xs_name = join(EMB_DIR,emb_fname+'_ova_x')
 emb_xps_name = join(EMB_DIR,emb_fname+'_ova_xp')
@@ -49,7 +49,12 @@ else:
         with open(emb_num_name+'.pickle','rb') as f:
             number_emb_dict = pickle.load(f)
     else:
-        number_emb_dict,_ = vocab2vec(number_array, EMB_DIR, emb_num_name, base_emb, ['pickle','npy'])
+        if emb_fname == 'random':
+            number_emb_dict = {n:np.random.randn(d) for n in number_array}
+            with open(join(EMB_DIR,emb_fname+'.pickle'), 'wb') as handle:
+                pickle.dump(number_emb_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        else:
+            number_emb_dict,_ = vocab2vec(number_array, EMB_DIR, emb_num_name, base_emb, ['pickle','npy'])
 
     xs,xps = [],[]
     n_ova = len(Xss[0])
@@ -82,31 +87,31 @@ else:
     np.save(emb_xms_name+'.npy',P_xms)
 
 # calculate the original accuracy
-batch_size = P_x.shape[0]
-beta = 80
+# batch_size = P_x.shape[0]
+beta = 16
+dim = 32
+n_epochs = 20
+lr = 0.5
+mini_batch_size = 512
 
-Dp = LA.norm(P_x - P_xp,axis=1)
-Dm = LA.norm(P_x[:,:,None] - P_xms,axis=1).min(axis=1)
-
-I_hat = float(torch.sum(soft_indicator(torch.tensor(Dm - Dp, dtype=torch.float), beta=beta)))/batch_size
-acc = sum(Dp <= Dm) / batch_size
-print('original acc: ',acc)
-print('original I_hat: ', -I_hat)
+# Dp = LA.norm(P_x - P_xp,axis=1)
+# Dm = LA.norm(P_x[:,:,None] - P_xms,axis=1).min(axis=1)
+#
+# I_hat = float(torch.sum(soft_indicator(torch.tensor(Dm - Dp, dtype=torch.float), beta=beta)))/batch_size
+# acc = sum(Dp <= Dm) / batch_size
+# print('original acc: ',acc)
+# print('original I_hat: ', -I_hat)
 
 # model
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # w = torch.nn.Parameter(torch.randn(d))
-dim = 2
 W = torch.randn((dim,d),requires_grad=True,device=device)
 # w = torch.randn(d,requires_grad=True)
 # w.data = w.data/torch.norm(w).data
 torch.nn.init.orthogonal_(W)
-W = W.T # col orthognol
+W.data = W.T.data # col orthognol
 
-n_epochs = 20
-
-lr = 0.002
 
 P_x = torch.from_numpy(P_x).float()
 P_xp = torch.from_numpy(P_xp).float()
@@ -121,12 +126,12 @@ init_loss = inf
 
 def evaluate_w(P_x,P_xp,P_xms,mini_batch_size,W):
     train_data = TensorDataset(P_x, P_xp, P_xms)
-    mini_batchs = DataLoader(train_data,batch_size=mini_batch_size,shuffle=True,num_workers=8)
+    mini_batchs = DataLoader(train_data,batch_size=mini_batch_size,shuffle=True,num_workers=0)
     loss,acc = 0,0
     for mini_batch in mini_batchs:
         mini_P_x, mini_P_xp, mini_P_xms = mini_batch
-        dp = torch.norm(torch.matmul(mini_P_x-mini_P_xp,W.cpu()))
-        dm = torch.min(torch.norm(torch.matmul(W.cpu(),mini_P_x[:,:,None]-mini_P_xms)),dim=1)[0]
+        dp = torch.norm(torch.matmul(mini_P_x-mini_P_xp,W.cpu()),dim=1)
+        dm = torch.min(torch.norm(torch.matmul(W.cpu().T,mini_P_x[:,:,None]-mini_P_xms),dim=1),dim=1)[0]
         #
         objs = soft_indicator(dm-dp,beta)
         loss += -torch.sum(objs).item()
@@ -134,13 +139,12 @@ def evaluate_w(P_x,P_xp,P_xms,mini_batch_size,W):
     batch_size = P_x.shape[0]
     return acc/batch_size,loss/batch_size
 
-mini_batch_size = 128
 
 acc,loss = evaluate_w(P_x,P_xp,P_xms,mini_batch_size,W)
 print('init specialized acc: ',acc)
 print('init specialized I_hat: ',loss)
 
-mini_batchs = DataLoader(train_data,batch_size=mini_batch_size,shuffle=True,num_workers=8)
+mini_batchs = DataLoader(train_data,batch_size=mini_batch_size,shuffle=True,num_workers=0)
 
 for t in range(n_epochs):
 
@@ -153,8 +157,8 @@ for t in range(n_epochs):
         mini_P_xp = mini_P_xp.to(device)
         mini_P_xms = mini_P_xms.to(device)
 
-        dp = torch.norm(torch.matmul(mini_P_x-mini_P_xp,W))
-        dm = torch.min(torch.norm(torch.matmul(W,mini_P_x[:,:,None]-mini_P_xms)),dim=1)[0]
+        dp = torch.norm(torch.matmul(mini_P_x-mini_P_xp,W),dim=1)
+        dm = torch.min(torch.norm(torch.matmul(W.T,mini_P_x[:,:,None]-mini_P_xms),dim=1),dim=1)[0]
 
         objs = soft_indicator(dm-dp,beta)
         loss = -torch.mean(objs)
@@ -191,8 +195,9 @@ for t in range(n_epochs):
         # find the nearest col orthogonal matrix
         # ref: http://people.csail.mit.edu/bkph/articles/Nearest_Orthonormal_Matrix.pdf
         # ref: https://math.stackexchange.com/q/2500881
-        # todo: may have the nan problem, solve it
-        W.data = W.data @ ((W.data.T @ W.data) ** (-0.5))
+        # ref: https://math.stackexchange.com/a/2215371
+        u,s,v = torch.svd(W.data)
+        W.data = u @ v.T
         assert not torch.isnan(W.data).any(),'W has nan values'
 
 
