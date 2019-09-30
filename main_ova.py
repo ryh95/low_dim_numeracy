@@ -88,11 +88,11 @@ else:
 
 # calculate the original accuracy
 # batch_size = P_x.shape[0]
-beta = 16
-dim = 32
-n_epochs = 20
-lr = 0.5
-mini_batch_size = 512
+beta = 6
+dim = 64
+n_epochs = 30
+lr = 0.01
+mini_batch_size = 1024
 
 # Dp = LA.norm(P_x - P_xp,axis=1)
 # Dm = LA.norm(P_x[:,:,None] - P_xms,axis=1).min(axis=1)
