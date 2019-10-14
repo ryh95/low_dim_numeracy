@@ -28,7 +28,23 @@ for i,n in enumerate(number_array):
         xp = n_r1
     remain_numbers = number_set - set([x,xp])
 
-    one_test = [[x,xp,m] for m in remain_numbers]
+    if x.is_integer():
+        str_x = str(int(x))
+    else:
+        str_x = str(x)
+    if xp.is_integer():
+        str_xp = str(int(xp))
+    else:
+        str_xp = str(xp)
+
+    one_test = []
+    for m in remain_numbers:
+        if m.is_integer():
+            str_m = str(int(m))
+        else:
+            str_m = str(m)
+        one_test.append([str_x,str_xp,str_m])
+    # one_test = [[x,xp,m] for m in remain_numbers]
 
     ova_tests.append(one_test)
 
@@ -38,20 +54,36 @@ x = number_array[0]
 xp = number_array[1]
 remain_numbers = number_set - set([x, xp])
 
-one_test = [[x, xp, m] for m in remain_numbers]
+one_test = []
+for m in remain_numbers:
+    if m.is_integer():
+        str_m = str(int(m))
+    else:
+        str_m = str(m)
+    one_test.append([str(int(x)),str(int(xp)),str_m])
+
+# one_test = [[x, xp, m] for m in remain_numbers]
 ova_tests.append(one_test)
 
 x = number_array[-1]
 xp = number_array[-2]
 remain_numbers = number_set - set([x, xp])
 
-one_test = [[x, xp, m] for m in remain_numbers]
+one_test = []
+for m in remain_numbers:
+    if m.is_integer():
+        str_m = str(int(m))
+    else:
+        str_m = str(m)
+    one_test.append([str(x),str(int(xp)),str_m])
+
+# one_test = [[x, xp, m] for m in remain_numbers]
 ova_tests.append(one_test)
 
 # check whether the test is valid
 for test in ova_tests:
     for triple in test:
-        assert is_valid_relax_triple(triple)
+        assert is_valid_relax_triple([float(n) for n in triple])
 
-with open(join(DATA_DIR,'ovamag.pkl'),'wb') as f:
+with open(join(DATA_DIR,'ovamag_str.pkl'),'wb') as f:
     pickle.dump(ova_tests,f,pickle.HIGHEST_PROTOCOL)
