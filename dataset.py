@@ -9,6 +9,11 @@ import numpy as np
 from config import EMB_DIR
 from utils import vocab2vec
 
+"""
+custom dataset
+see ref:
+https://pytorch.org/tutorials/beginner/data_loading_tutorial.html
+"""
 
 class OVADataset(Dataset):
 
@@ -49,6 +54,14 @@ class OVADataset(Dataset):
         return len(self.ova_data)
 
     def __getitem__(self, idx):
+        """
+
+        :param idx: id of the sample
+        :return: the sample corresponding with the idx
+        """
+        # generally not recommended to return CUDA tensors in multi - process loading
+        # see ref
+        # https://pytorch.org/docs/stable/data.html
         test_sample = self.ova_data[idx]
         n_ova = len(test_sample)
         d = next(iter(self.number_emb_dict.values())).numel()
