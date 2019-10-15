@@ -55,6 +55,9 @@ class OVA_Subspace_Model(Subspace_Model):
 
 
     def forward(self,mini_P_x, mini_P_xp, mini_P_xms):
+        mini_P_x = mini_P_x.to(self.device)  # can set non_blocking=True
+        mini_P_xp = mini_P_xp.to(self.device)
+        mini_P_xms = mini_P_xms.to(self.device)
         dp = torch.norm(torch.matmul(mini_P_x - mini_P_xp, self.W), dim=1)
         dm = torch.min(torch.norm(torch.matmul(self.W.T, mini_P_x[:, :, None] - mini_P_xms), dim=1), dim=1)[0]
 
@@ -71,9 +74,6 @@ class OVA_Subspace_Model(Subspace_Model):
         # num_mini_batches = 0
         for mini_batch in data_batches:
             mini_P_x, mini_P_xp, mini_P_xms = mini_batch
-            mini_P_x = mini_P_x.to(self.device)
-            mini_P_xp = mini_P_xp.to(self.device)
-            mini_P_xms = mini_P_xms.to(self.device)
 
             dp, dm = self.forward(mini_P_x, mini_P_xp, mini_P_xms)
             loss, acc = self.criterion(dp.data, dm.data)
