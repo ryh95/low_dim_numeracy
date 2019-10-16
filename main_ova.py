@@ -4,6 +4,9 @@ from math import inf
 from os.path import join
 
 import torch
+from skopt import gp_minimize
+from skopt.space import Integer, Real, Categorical
+from skopt.utils import use_named_args, dump
 from torch import autograd
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -16,11 +19,6 @@ from model import OVA_Subspace_Model
 emb_fname = 'glove.6B.300d' # or 'random'
 
 # calculate the original accuracy
-beta = 6
-dim = 64
-n_epochs = 50
-lr = 0.005
-mini_batch_size = 512
 
 # Dp = LA.norm(P_x - P_xp,axis=1)
 # Dm = LA.norm(P_x[:,:,None] - P_xms,axis=1).min(axis=1)
@@ -32,7 +30,7 @@ mini_batch_size = 512
 
 train_data = OVADataset('data/ovamag_str.pkl',{"emb_fname":emb_fname})
 # preload all train_data into memory to save time
-mini_batchs = DataLoader(train_data,batch_size=mini_batch_size,num_workers=8)
+mini_batchs = DataLoader(train_data,batch_size=128,num_workers=8)
 P_x,P_xp,P_xms = [],[],[]
 for i,mini_batch in enumerate(mini_batchs):
     mini_P_x, mini_P_xp, mini_P_xms = mini_batch
@@ -44,73 +42,100 @@ P_xp = torch.cat(P_xp)
 P_xms = torch.cat(P_xms)
 train_data = TensorDataset(P_x,P_xp,P_xms)
 
-# model
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+dim = 64
+verbose = False
+space = [Categorical([dim], name='subspace_dim'),
+         Categorical([verbose],name='verbose'),
+         Integer(1,30,name='beta'),
+         Real(10**-5, 10**0, "log-uniform", name='learning_rate'),
+         Categorical([32,64,128,256,512],name='mini_batch_size')]
+
+n_epochs = 50
 # d = next(iter(train_data.number_emb_dict.values())).numel()
 d = P_x.size()[1]
-ova_model = OVA_Subspace_Model(dim,d,beta)
 
-optimizer = torch.optim.Adam(ova_model.parameters(),lr)
-# SGD performs poorly, the reason is unclear
-# optimizer = torch.optim.SGD([W],lr,momentum=0.9)
+@use_named_args(space)
+def objective(**params):
 
-best_acc = -inf
-best_loss = inf
+    dim = params['subspace_dim']
+    beta = params['beta']
+    lr = params['learning_rate']
+    mini_batch_size = params['mini_batch_size']
+    verbose = params['verbose']
 
-mini_batchs = DataLoader(train_data,batch_size=mini_batch_size,shuffle=True,num_workers=0,pin_memory=True)
+    best_acc = -inf
 
-acc,loss = ova_model.evaluate(mini_batchs)
-print('init specialized acc: ',acc)
-# print('init specialized I_hat: ',loss)
+    mini_batchs = DataLoader(train_data, batch_size=mini_batch_size, shuffle=True, num_workers=0, pin_memory=True)
 
-for t in range(n_epochs):
+    ova_model = OVA_Subspace_Model(dim, d, beta)
 
-    print('epoch number: ', t)
-    start = time.time()
-    # num_mini_batches = 0
-    for i,mini_batch in enumerate(mini_batchs):
+    # acc, loss = ova_model.evaluate(mini_batchs)
+    # print('init specialized acc: ', acc)
 
-        mini_P_x, mini_P_xp, mini_P_xms = mini_batch
+    # SGD performs poorly, the reason is not clear
+    # optimizer = torch.optim.SGD([W],lr,momentum=0.9)
+    optimizer = torch.optim.Adam(ova_model.parameters(), lr)
 
-        dp,dm = ova_model(mini_P_x, mini_P_xp, mini_P_xms)
-        loss,acc = ova_model.criterion(dp,dm)
+    for t in range(n_epochs):
 
-        # print(loss)
-        optimizer.zero_grad()
+        mini_batch_acc = []
+        if verbose:
+            print('epoch number: ', t)
+            start = time.time()
 
-        with autograd.detect_anomaly():
-            # avoid nan gradient
-            loss.backward()
+        for i,mini_batch in enumerate(mini_batchs):
 
-        if i % 5:
-            if acc.item() > best_acc:
-                best_W = ova_model.W.data.clone()
-                best_acc = acc.item()
-                print('specialized acc: ', best_acc)
+            mini_P_x, mini_P_xp, mini_P_xms = mini_batch
 
-        optimizer.step()
+            dp,dm = ova_model(mini_P_x, mini_P_xp, mini_P_xms)
+            loss,acc = ova_model.criterion(dp,dm)
 
-        ova_model.project()
-        # num_mini_batches += 1
-    # print(num_mini_batches)
-    print("train: ", time.time() - start)
+            # print(loss)
+            optimizer.zero_grad()
 
-# print("Deviation from the constraint: ",torch.norm(best_W.T @ best_W - torch.eye(dim).to(device)).item())
-ova_model.W = torch.nn.Parameter(best_W)
-evaluate_acc, evaluate_loss = ova_model.evaluate(mini_batchs)
+            with autograd.detect_anomaly():
+                # avoid nan gradient
+                loss.backward()
 
+            if i % 5:
+                if acc.item() > best_acc:
+                    best_W = ova_model.W.data.clone()
+                    best_acc = acc.item()
+                    if verbose:
+                        print('specialized acc: ', best_acc)
+
+            optimizer.step()
+
+            ova_model.project()
+            mini_batch_acc.append(acc.item())
+
+        if verbose:
+            print("train: ", time.time() - start)
+
+    # print("Deviation from the constraint: ",torch.norm(best_W.T @ best_W - torch.eye(dim).to(device)).item())
+    ova_model.W = torch.nn.Parameter(best_W)
+    evaluate_acc, evaluate_loss = ova_model.evaluate(mini_batchs)
+    return -evaluate_acc
+
+# params = [64,False,6,0.005,512]
+# print(objective(params))
+
+x0 = [dim,verbose,6,0.005,512]
+res_gp = gp_minimize(objective, space, n_calls=30, random_state=0, verbose=True, x0=x0)
 results_fname = '_'.join(['results',emb_fname,str(dim)])
-torch.save({
-        'beta':beta,
-        'dim':dim,
-        'n_epochs':n_epochs,
-        'mini_batch_size':mini_batch_size,
-        'W':ova_model.state_dict(),
-        'optimizer_state':optimizer.state_dict(),
-        'acc': evaluate_acc
-    }, results_fname+'.pt')
-print('best acc: ', evaluate_acc)
-# print('best loss: ',evaluate_loss)
+dump(res_gp, results_fname+'.pkl',store_objective=False)
 
-with open(join(RESULTS_DIR,results_fname+'.txt'),'w') as f:
-    f.write('best acc: %f' % (evaluate_acc))
+# torch.save({
+#         'beta':beta,
+#         'dim':dim,
+#         'n_epochs':n_epochs,
+#         'mini_batch_size':mini_batch_size,
+#         'W':ova_model.state_dict(),
+#         'optimizer_state':optimizer.state_dict(),
+#         'acc': evaluate_acc
+#     }, results_fname+'.pt')
+# print('best acc: ', evaluate_acc)
+# # print('best loss: ',evaluate_loss)
+#
+# with open(join(RESULTS_DIR,results_fname+'.txt'),'w') as f:
+#     f.write('best acc: %f' % (evaluate_acc))

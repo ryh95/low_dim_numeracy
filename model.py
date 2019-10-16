@@ -70,7 +70,7 @@ class OVA_Subspace_Model(Subspace_Model):
         :return:
         """
         losses, accs = [],[]
-        start = time.time()
+        # start = time.time()
         # num_mini_batches = 0
         for mini_batch in data_batches:
             mini_P_x, mini_P_xp, mini_P_xms = mini_batch
@@ -82,7 +82,7 @@ class OVA_Subspace_Model(Subspace_Model):
             accs.append(acc)
             # num_mini_batches += 1
         # print(num_mini_batches)
-        print("evaluate: ", time.time() - start)
+        # print("evaluate: ", time.time() - start)
         loss = torch.mean(torch.stack(losses))
         acc = torch.mean(torch.stack(accs))
         return acc.item(),loss.item()
