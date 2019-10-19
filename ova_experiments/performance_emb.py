@@ -29,7 +29,7 @@ mini_func = gp_minimize
 optimize_types = ['subspace_dim','beta','lr','mini_batch_size']
 minimizer = Minimizer(base_workspace, optimize_types, mini_func)
 
-embs = ['skipgram-2_num','wiki-news-300d-1M-subword_num','crawl-300d-2M-subword_num','glove.6B.300d', 'glove.840B.300d']
+embs = ['skipgram-2','skipgram-5','wiki-news-300d-1M-subword_num','crawl-300d-2M-subword_num', 'glove.840B.300d','glove.6B.300d']
 for fname in embs:
 
     base_workspace['train_data'] = load_dataset(fname)

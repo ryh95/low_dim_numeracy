@@ -1,5 +1,6 @@
 import time
 
+import scipy.linalg as scipy_linalg
 import torch
 from torch import nn
 
@@ -46,9 +47,20 @@ class Subspace_Model(nn.Module):
         # ref: http://people.csail.mit.edu/bkph/articles/Nearest_Orthonormal_Matrix.pdf
         # ref: https://math.stackexchange.com/q/2500881
         # ref: https://math.stackexchange.com/a/2215371
-        u, s, v = torch.svd(self.W.data)
-        self.W.data = u @ v.T
-        assert not torch.isnan(self.W.data).any(), 'W has nan values'
+        try:
+            u, s, vh = scipy_linalg.svd(self.W.data.cpu().numpy(),full_matrices=False,lapack_driver='gesvd')
+            self.W.data = torch.from_numpy(u @ vh).to(self.device)
+            assert not torch.isnan(self.W.data).any(), 'W has nan values'
+        except RuntimeError as e:
+            # handle following error
+            # RuntimeError: svd_cuda: the updating process of SBDSDC did not converge (error: 1)
+            print('Runtime error: {0}'.format(e))
+            print(self.W)
+            print(self.W.grad)
+            print('saving relevant info...')
+            torch.save(self.W,'runtime_error_W.pt')
+            torch.save(self.W.grad,'runtime_error_W_grad.pt')
+            exit()
 
 
 class OVA_Subspace_Model(Subspace_Model):

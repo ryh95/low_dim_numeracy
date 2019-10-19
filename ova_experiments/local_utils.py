@@ -3,14 +3,14 @@ from math import inf
 from os.path import join
 
 import torch
-from skopt.utils import use_named_args
+from skopt.utils import use_named_args, dump
 from torch import autograd
 from torch.utils.data import DataLoader, TensorDataset
 
 from config import DATA_DIR
 from dataset import OVADataset
 from model import OVA_Subspace_Model
-
+from skopt.callbacks import CheckpointSaver
 
 class Minimizer(object):
 
@@ -82,7 +82,22 @@ class Minimizer(object):
 
     def minimize(self,space,n_calls,verbose,x0):
 
-        return self.mini_func(self.objective, space, n_calls=n_calls, random_state=0, verbose=verbose, x0=x0)
+        checkpoint_fname = self.base_workspace['train_data'].number_emb_source+'_checkpoint.pkl'
+
+        checkpoint_callback = MyCheckpointSaver(checkpoint_fname,remove_func=True)
+
+        return self.mini_func(self.objective, space, n_calls=n_calls, random_state=0, callback=[checkpoint_callback], verbose=verbose, x0=x0)
+
+class MyCheckpointSaver(CheckpointSaver):
+
+    def __init__(self,checkpoint_path, remove_func, **dump_options):
+        super(MyCheckpointSaver,self).__init__(checkpoint_path, **dump_options)
+        self.remove_func = remove_func
+
+    def __call__(self,res):
+        if self.remove_func:
+            res.specs['args']['func'] = None
+        dump(res, self.checkpoint_path, **self.dump_options)
 
 def load_dataset(emb_fname,pre_load=True):
 
@@ -100,4 +115,5 @@ def load_dataset(emb_fname,pre_load=True):
         P_xp = torch.cat(P_xp)
         P_xms = torch.cat(P_xms)
         train_data = TensorDataset(P_x, P_xp, P_xms)
+        train_data.number_emb_source = emb_fname
     return train_data

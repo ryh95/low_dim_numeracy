@@ -48,6 +48,7 @@ class OVADataset(Dataset):
         number_emb_dict = {k: torch.from_numpy(v).float() for k,v in number_emb_dict.items()}
 
         self.number_emb_dict = number_emb_dict
+        self.number_emb_source = emb_fname
         self.ova_data = Xss
 
     def __len__(self):

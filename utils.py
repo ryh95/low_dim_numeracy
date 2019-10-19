@@ -131,7 +131,7 @@ def preprocess_google_news_skip(emb_fname):
 
 def preprocess_skipgram2(emb_fname):
     """
-    preprocess skipgram-2 and two fasttext emb file
+    preprocess skipgram-2/skipgram-5 and two fasttext emb file
     :param emb_fname:
     :return:
     """
