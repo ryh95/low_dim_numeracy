@@ -36,7 +36,7 @@ class Subspace_Model(nn.Module):
 
         objs = self.soft_indicator(dm - dp)
         loss = -torch.mean(objs)
-        acc = torch.mean((dp <= dm).float())  # mini-batch acc, batch size is same as dp/dm
+        acc = torch.mean((dp < dm).float())  # mini-batch acc, batch size is same as dp/dm
 
         return loss,acc
 
