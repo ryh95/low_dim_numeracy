@@ -11,6 +11,8 @@ from config import DATA_DIR
 from dataset import OVADataset
 from model import OVA_Subspace_Model
 from skopt.callbacks import CheckpointSaver
+import scipy.linalg as LA
+import numpy as np
 
 class Minimizer(object):
 
@@ -117,3 +119,16 @@ def load_dataset(emb_fname,pre_load=True):
         train_data = TensorDataset(P_x, P_xp, P_xms)
         train_data.number_emb_source = emb_fname
     return train_data
+
+def init_evaluate(dataset):
+    losses, accs = [], []
+    data_batches = DataLoader(dataset, batch_size=128)
+    for mini_batch in data_batches:
+        mini_P_x, mini_P_xp, mini_P_xms = mini_batch
+
+        Dp = LA.norm(mini_P_x - mini_P_xp,axis=1)
+        Dm = LA.norm(mini_P_x[:,:,None] - mini_P_xms,axis=1).min(axis=1)
+        acc = np.mean(Dp<Dm)
+
+        accs.append(acc)
+    print('original acc: ',np.mean(accs))
