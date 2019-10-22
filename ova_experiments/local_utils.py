@@ -82,13 +82,9 @@ class Minimizer(object):
         evaluate_acc, evaluate_loss = model.evaluate(mini_batchs)
         return -evaluate_acc
 
-    def minimize(self,space,n_calls,verbose,x0):
+    def minimize(self,space,**min_args):
 
-        checkpoint_fname = self.base_workspace['train_data'].number_emb_source+'_checkpoint.pkl'
-
-        checkpoint_callback = MyCheckpointSaver(checkpoint_fname,remove_func=True)
-
-        return self.mini_func(self.objective, space, n_calls=n_calls, random_state=0, callback=[checkpoint_callback], verbose=verbose, x0=x0)
+        return self.mini_func(self.objective, space, **min_args)
 
 class MyCheckpointSaver(CheckpointSaver):
 
