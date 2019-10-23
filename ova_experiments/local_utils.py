@@ -8,7 +8,7 @@ from torch import autograd
 from torch.utils.data import DataLoader, TensorDataset
 
 from config import DATA_DIR
-from dataset import OVADataset
+from dataset import OVADataset, SCDataset
 from model import OVA_Subspace_Model
 from skopt.callbacks import CheckpointSaver
 import scipy.linalg as LA
@@ -97,9 +97,14 @@ class MyCheckpointSaver(CheckpointSaver):
             res.specs['args']['func'] = None
         dump(res, self.checkpoint_path, **self.dump_options)
 
-def load_dataset(emb_fname,pre_load=True):
+def load_dataset(test_type,emb_fname,pre_load=True):
 
-    train_data = OVADataset(join(DATA_DIR,'ovamag_str.pkl'), {"emb_fname": emb_fname})
+    if test_type == 'ova':
+        train_data = OVADataset('ovamag_str', {"emb_fname": emb_fname})
+    elif test_type == 'sc':
+        train_data = SCDataset('scmag_str', {"emb_fname":emb_fname})
+    else:
+        assert False
     if pre_load:
         # preload all train_data into memory to save time
         mini_batchs = DataLoader(train_data, batch_size=128, num_workers=8)

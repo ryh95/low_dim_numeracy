@@ -6,14 +6,22 @@ from skopt import gp_minimize
 from skopt.space import Integer, Real, Categorical
 from skopt.utils import dump
 
-from model import OVA_Subspace_Model
+from model import OVA_Subspace_Model, SC_Subspace_Model
 from ova_experiments.local_utils import load_dataset, Minimizer, init_evaluate, MyCheckpointSaver
+
+experiments = 'sc'
+if experiments == 'ova':
+    model = OVA_Subspace_Model
+elif experiments == 'sc':
+    model = SC_Subspace_Model
+else:
+    assert False
 
 base_workspace = {
     'train_verbose':False,
     'n_epochs':50,
     'emb_dim':300,
-    'model':OVA_Subspace_Model,
+    'model':model,
     'optimizer':torch.optim.Adam
 }
 mini_func = gp_minimize
@@ -30,7 +38,7 @@ embs = ['skipgram-2_num','skipgram-5_num','wiki-news-300d-1M-subword_num','crawl
 
 for fname in embs:
 
-    base_workspace['train_data'] = load_dataset(fname)
+    base_workspace['train_data'] = load_dataset(experiments,fname)
 
     # order should be the same as the "optimize_types"
     space = [Integer(2,128),
@@ -53,18 +61,3 @@ for fname in embs:
 
     results_fname = '_'.join(['results',fname])
     dump(res, results_fname+'.pkl',store_objective=False)
-
-# torch.save({
-#         'beta':beta,
-#         'dim':dim,
-#         'n_epochs':n_epochs,
-#         'mini_batch_size':mini_batch_size,
-#         'W':ova_model.state_dict(),
-#         'optimizer_state':optimizer.state_dict(),
-#         'acc': evaluate_acc
-#     }, results_fname+'.pt')
-# print('best acc: ', evaluate_acc)
-# # print('best loss: ',evaluate_loss)
-#
-# with open(join(RESULTS_DIR,results_fname+'.txt'),'w') as f:
-#     f.write('best acc: %f' % (evaluate_acc))

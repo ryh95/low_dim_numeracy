@@ -62,19 +62,6 @@ class Subspace_Model(nn.Module):
             torch.save(self.W.grad,'runtime_error_W_grad.pt')
             exit()
 
-
-class OVA_Subspace_Model(Subspace_Model):
-
-
-    def forward(self,mini_P_x, mini_P_xp, mini_P_xms):
-        mini_P_x = mini_P_x.to(self.device)  # can set non_blocking=True
-        mini_P_xp = mini_P_xp.to(self.device)
-        mini_P_xms = mini_P_xms.to(self.device)
-        dp = torch.norm(torch.matmul(mini_P_x - mini_P_xp, self.W), dim=1)
-        dm = torch.min(torch.norm(torch.matmul(self.W.T, mini_P_x[:, :, None] - mini_P_xms), dim=1), dim=1)[0]
-
-        return dp,dm
-
     def evaluate(self,data_batches):
         """
         evaluate W on data_batches, i.e., whole training data
@@ -98,3 +85,28 @@ class OVA_Subspace_Model(Subspace_Model):
         loss = torch.mean(torch.stack(losses))
         acc = torch.mean(torch.stack(accs))
         return acc.item(),loss.item()
+
+
+class OVA_Subspace_Model(Subspace_Model):
+
+
+    def forward(self,mini_P_x, mini_P_xp, mini_P_xms):
+        mini_P_x = mini_P_x.to(self.device)  # can set non_blocking=True
+        mini_P_xp = mini_P_xp.to(self.device)
+        mini_P_xms = mini_P_xms.to(self.device)
+        dp = torch.norm(torch.matmul(mini_P_x - mini_P_xp, self.W), dim=1)
+        dm = torch.min(torch.norm(torch.matmul(self.W.T, mini_P_x[:, :, None] - mini_P_xms), dim=1), dim=1)[0]
+
+        return dp,dm
+
+
+class SC_Subspace_Model(Subspace_Model):
+
+    def forward(self,mini_P_x, mini_P_xp, mini_P_xm):
+        mini_P_x = mini_P_x.to(self.device)  # can set non_blocking=True
+        mini_P_xp = mini_P_xp.to(self.device)
+        mini_P_xm = mini_P_xm.to(self.device)
+        dp = torch.norm(torch.matmul(mini_P_x - mini_P_xp, self.W), dim=1)
+        dm = torch.norm(torch.matmul(mini_P_x - mini_P_xm, self.W), dim=1)
+
+        return dp,dm

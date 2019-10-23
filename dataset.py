@@ -1,4 +1,5 @@
 import math
+import os
 import pickle
 from os.path import join, isfile
 
@@ -6,7 +7,7 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 
-from config import EMB_DIR
+from config import EMB_DIR, DATA_DIR
 from utils import vocab2vec
 
 """
@@ -15,19 +16,19 @@ see ref:
 https://pytorch.org/tutorials/beginner/data_loading_tutorial.html
 """
 
-class OVADataset(Dataset):
+class BaseDataset(Dataset):
 
-    def __init__(self,ova_fname,emb_config):
+    def __init__(self, fname, emb_config):
         """
 
-        :param ova_fname: file name of the OVA test, e.g. 'data/ovamag.pkl'
+        :param fname: file name of the OVA test, e.g. 'data/ovamag.pkl'
         :param emb_config: {"emb_fname": 'random'/'glove.6B.300d',"dim":300(random)}
         """
-        with open(ova_fname, 'rb') as f:
-            Xss = pickle.load(f)
+        with open(join(DATA_DIR, fname + '.pkl'), 'rb') as f:
+            X = pickle.load(f)
 
         emb_fname = emb_config['emb_fname'] # embedding file name used to create number embedding
-        num_emb_fname = join(EMB_DIR, emb_fname + '_ova_num_emb') # embedding file name for numbers in OVA
+        num_emb_fname = join(EMB_DIR, emb_fname + '_' + fname + '_num_emb') # embedding file name for numbers in OVA
         base_emb = join(EMB_DIR, emb_fname + '.txt') # add suffix
 
         if isfile(num_emb_fname + '.pickle'):
@@ -35,7 +36,7 @@ class OVADataset(Dataset):
                 number_emb_dict = pickle.load(f)
         else:
 
-            number_array = list(set(np.array(Xss).flat))
+            number_array = list(set(np.array(X).flat))
 
             if emb_fname == 'random':
                 d = emb_config['dim']
@@ -49,10 +50,12 @@ class OVADataset(Dataset):
 
         self.number_emb_dict = number_emb_dict
         self.number_emb_source = emb_fname
-        self.ova_data = Xss
+        self.data = X
 
     def __len__(self):
-        return len(self.ova_data)
+        return len(self.data)
+
+class OVADataset(BaseDataset):
 
     def __getitem__(self, idx):
         """
@@ -63,7 +66,7 @@ class OVADataset(Dataset):
         # generally not recommended to return CUDA tensors in multi - process loading
         # see ref
         # https://pytorch.org/docs/stable/data.html
-        test_sample = self.ova_data[idx]
+        test_sample = self.data[idx]
         n_ova = len(test_sample)
         d = next(iter(self.number_emb_dict.values())).numel()
         P_xms = torch.zeros(d, n_ova, dtype=torch.float32)
@@ -75,3 +78,12 @@ class OVADataset(Dataset):
 
 
         return P_x,P_xp,P_xms
+
+class SCDataset(BaseDataset):
+
+    def __getitem__(self, idx):
+        test_sample = self.data[idx]
+        P_x = self.number_emb_dict[test_sample[0]]
+        P_xp = self.number_emb_dict[test_sample[1]]
+        P_xm = self.number_emb_dict[test_sample[2]]
+        return P_x,P_xp,P_xm
