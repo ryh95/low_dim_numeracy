@@ -7,7 +7,7 @@ from skopt.space import Integer, Real, Categorical
 from skopt.utils import dump
 
 from model import OVA_Subspace_Model, SC_Subspace_Model
-from ova_experiments.local_utils import load_dataset, Minimizer, init_evaluate, MyCheckpointSaver
+from experiments.local_utils import load_dataset, Minimizer, init_evaluate, MyCheckpointSaver
 
 experiments = 'sc'
 if experiments == 'ova':
