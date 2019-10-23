@@ -86,16 +86,17 @@ class Minimizer(object):
 
         return self.mini_func(self.objective, space, **min_args)
 
-class MyCheckpointSaver(CheckpointSaver):
-
-    def __init__(self,checkpoint_path, remove_func, **dump_options):
-        super(MyCheckpointSaver,self).__init__(checkpoint_path, **dump_options)
-        self.remove_func = remove_func
-
-    def __call__(self,res):
-        if self.remove_func:
-            res.specs['args']['func'] = None
-        dump(res, self.checkpoint_path, **self.dump_options)
+# own checkpoint can not be load if the package name is changed, so my checkpoint class is disabled
+# class MyCheckpointSaver(CheckpointSaver):
+#
+#     def __init__(self,checkpoint_path, remove_func, **dump_options):
+#         super(MyCheckpointSaver,self).__init__(checkpoint_path, **dump_options)
+#         self.remove_func = remove_func
+#
+#     def __call__(self,res):
+#         if self.remove_func:
+#             res.specs['args']['func'] = None
+#         dump(res, self.checkpoint_path, **self.dump_options)
 
 def load_dataset(test_type,emb_fname,pre_load=True):
 

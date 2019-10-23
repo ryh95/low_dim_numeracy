@@ -1,10 +1,11 @@
 import torch
 from skopt import gp_minimize
+from skopt.callbacks import CheckpointSaver
 from skopt.space import Integer, Real, Categorical
 from skopt.utils import dump
 
 from model import OVA_Subspace_Model, SC_Subspace_Model
-from experiments.local_utils import load_dataset, Minimizer, MyCheckpointSaver
+from experiments.local_utils import load_dataset, Minimizer
 
 emb_fname = 'glove.6B.300d' # or 'random'
 experiments = 'sc'
@@ -37,7 +38,7 @@ for dim in dims:
 
     x0 = [dim,6,0.005,512]
     checkpoint_fname = '_'.join([emb_fname,str(dim)]) + '_checkpoint.pkl'
-    checkpoint_callback = MyCheckpointSaver(checkpoint_fname, remove_func=True)
+    checkpoint_callback = CheckpointSaver(checkpoint_fname, store_objective=False)
 
     res = minimizer.minimize(space,n_calls=30,verbose=True,x0=x0,callback=[checkpoint_callback])
     results_fname = '_'.join(['results',emb_fname,str(dim)])

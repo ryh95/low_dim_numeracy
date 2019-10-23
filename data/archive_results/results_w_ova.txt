@@ -1,2 +1,0 @@
-best acc:  0.6747787610619469
-best specialized I_hat:  -0.5620973840224004

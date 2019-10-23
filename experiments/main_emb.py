@@ -3,11 +3,12 @@ import os
 import skopt
 import torch
 from skopt import gp_minimize
+from skopt.callbacks import CheckpointSaver
 from skopt.space import Integer, Real, Categorical
 from skopt.utils import dump
 
 from model import OVA_Subspace_Model, SC_Subspace_Model
-from experiments.local_utils import load_dataset, Minimizer, init_evaluate, MyCheckpointSaver
+from experiments.local_utils import load_dataset, Minimizer, init_evaluate
 
 experiments = 'sc'
 if experiments == 'ova':
@@ -47,7 +48,7 @@ for fname in embs:
              Categorical([32, 64, 128, 256, 512])]
 
     checkpoint_fname = fname + '_checkpoint.pkl'
-    checkpoint_callback = MyCheckpointSaver(checkpoint_fname, remove_func=True)
+    checkpoint_callback = CheckpointSaver(checkpoint_fname, store_objective=False)
 
     # load checkpoint if there exists checkpoint, otherwise from scratch
     if os.path.isfile(checkpoint_fname):
