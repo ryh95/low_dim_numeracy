@@ -39,10 +39,12 @@ class BaseDataset(Dataset):
             number_array = list(set(np.array(X).flat))
 
             if emb_fname == 'random':
+                print('generate random embedding...')
                 d = emb_config['dim']
                 number_emb_dict = {n: np.random.randn(d) for n in number_array}
-                with open(join(EMB_DIR, emb_fname + '.pickle'), 'wb') as handle:
+                with open(num_emb_fname+'.pickle', 'wb') as handle:
                     pickle.dump(number_emb_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                print('embedding saved')
             else:
                 number_emb_dict, _ = vocab2vec(number_array, EMB_DIR, num_emb_fname, base_emb, ['pickle'])
 

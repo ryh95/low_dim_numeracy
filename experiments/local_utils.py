@@ -98,12 +98,12 @@ class Minimizer(object):
 #             res.specs['args']['func'] = None
 #         dump(res, self.checkpoint_path, **self.dump_options)
 
-def load_dataset(test_type,emb_fname,pre_load=True):
+def load_dataset(test_type,emb_conf,pre_load=True):
 
     if test_type == 'ova':
-        train_data = OVADataset('ovamag_str', {"emb_fname": emb_fname})
+        train_data = OVADataset('ovamag_str', emb_conf)
     elif test_type == 'sc':
-        train_data = SCDataset('scmag_str', {"emb_fname":emb_fname})
+        train_data = SCDataset('scmag_str', emb_conf)
     else:
         assert False
     if pre_load:
@@ -119,7 +119,7 @@ def load_dataset(test_type,emb_fname,pre_load=True):
         P_xp = torch.cat(P_xp)
         P_xms = torch.cat(P_xms)
         train_data = TensorDataset(P_x, P_xp, P_xms)
-        train_data.number_emb_source = emb_fname
+        train_data.number_emb_source = emb_conf['emb_fname']
     return train_data
 
 def init_evaluate(dataset):

@@ -10,7 +10,7 @@ from skopt.utils import dump
 from model import OVA_Subspace_Model, SC_Subspace_Model
 from experiments.local_utils import load_dataset, Minimizer, init_evaluate
 
-experiments = 'sc'
+experiments = 'ova'
 if experiments == 'ova':
     model = OVA_Subspace_Model
 elif experiments == 'sc':
@@ -29,8 +29,8 @@ mini_func = gp_minimize
 optimize_types = ['subspace_dim','beta','lr','mini_batch_size']
 minimizer = Minimizer(base_workspace, optimize_types, mini_func)
 
-embs = ['skipgram-2_num','skipgram-5_num','wiki-news-300d-1M-subword_num','crawl-300d-2M-subword_num', 'glove.840B.300d','glove.6B.300d']
-
+# embs = ['skipgram-2_num','skipgram-5_num','wiki-news-300d-1M-subword_num','crawl-300d-2M-subword_num', 'glove.840B.300d','glove.6B.300d']
+embs = ['random-1','random-2','random-3','random-4','random-5']
 # for fname in embs:
 #     dataset = load_dataset(fname)
 #
@@ -38,8 +38,11 @@ embs = ['skipgram-2_num','skipgram-5_num','wiki-news-300d-1M-subword_num','crawl
 #     init_evaluate(dataset)
 
 for fname in embs:
-
-    base_workspace['train_data'] = load_dataset(experiments,fname)
+    emb_conf = {}
+    if fname == 'random':
+        emb_conf['dim'] = 300
+    emb_conf['emb_fname'] = fname
+    base_workspace['train_data'] = load_dataset(experiments,emb_conf)
 
     # order should be the same as the "optimize_types"
     space = [Integer(2,128),
