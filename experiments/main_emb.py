@@ -10,7 +10,7 @@ from skopt.utils import dump
 from model import OVA_Subspace_Model, SC_Subspace_Model
 from experiments.local_utils import load_dataset, Minimizer, init_evaluate
 
-experiments = 'ova'
+experiments = 'sc'
 if experiments == 'ova':
     model = OVA_Subspace_Model
 elif experiments == 'sc':
@@ -31,6 +31,8 @@ minimizer = Minimizer(base_workspace, optimize_types, mini_func)
 
 # embs = ['skipgram-2_num','skipgram-5_num','wiki-news-300d-1M-subword_num','crawl-300d-2M-subword_num', 'glove.840B.300d','glove.6B.300d']
 embs = ['random-1','random-2','random-3','random-4','random-5']
+# embs = ['random']
+
 # for fname in embs:
 #     dataset = load_dataset(fname)
 #

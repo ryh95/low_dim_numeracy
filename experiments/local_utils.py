@@ -53,6 +53,10 @@ class Minimizer(object):
 
                 mini_P_x, mini_P_xp, mini_P_xms = mini_batch
 
+                mini_P_x = mini_P_x.to(model.device)  # can set non_blocking=True
+                mini_P_xp = mini_P_xp.to(model.device)
+                mini_P_xms = mini_P_xms.to(model.device)
+
                 dp,dm = model(mini_P_x, mini_P_xp, mini_P_xms)
                 loss,acc = model.criterion(dp,dm)
 
@@ -128,9 +132,14 @@ def init_evaluate(dataset):
     for mini_batch in data_batches:
         mini_P_x, mini_P_xp, mini_P_xms = mini_batch
 
-        Dp = LA.norm(mini_P_x - mini_P_xp,axis=1)
-        Dm = LA.norm(mini_P_x[:,:,None] - mini_P_xms,axis=1).min(axis=1)
-        acc = np.mean(Dp<Dm)
+        Dp = torch.norm(mini_P_x - mini_P_xp,dim=1)
+
+        if len(mini_P_xms.size()) == 3:
+            Dm = torch.norm(mini_P_x[:,:,None] - mini_P_xms,dim=1).min(dim=1)[0]
+        else:
+            Dm = torch.norm(mini_P_x - mini_P_xms, dim=1)
+
+        acc = torch.mean((Dp<Dm).float())
 
         accs.append(acc)
-    print('original acc: ',np.mean(accs))
+    return torch.mean(torch.stack(accs)).item()
