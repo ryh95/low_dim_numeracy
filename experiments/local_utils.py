@@ -34,7 +34,7 @@ class Minimizer(object):
 
         mini_batchs = DataLoader(workspace['train_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=0, pin_memory=True)
 
-        model = self.model(workspace['subspace_dim'],workspace['emb_dim'],workspace['beta'])
+        model = self.model(workspace['subspace_dim'],workspace['emb_dim'],workspace['beta'],workspace['distance_metric'])
 
         # acc, loss = ova_model.evaluate(mini_batchs)
         # print('init specialized acc: ', acc)

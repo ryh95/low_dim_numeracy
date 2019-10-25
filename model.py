@@ -3,6 +3,8 @@ import time
 import scipy.linalg as scipy_linalg
 import torch
 from torch import nn
+import torch.nn.functional as F
+
 
 class Subspace_Model(nn.Module):
 
@@ -94,17 +96,31 @@ class Subspace_Model(nn.Module):
 class OVA_Subspace_Model(Subspace_Model):
 
 
+    def __init__(self,dim,d,beta,distance_metric):
+        super(OVA_Subspace_Model, self).__init__(dim,d,beta)
+        if distance_metric == 'euclidean':
+            self.distance = F.pairwise_distance
+        elif distance_metric == 'cosine':
+            self.distance = F.cosine_similarity
+
     def forward(self,mini_P_x, mini_P_xp, mini_P_xms):
-        dp = torch.norm(torch.matmul(mini_P_x - mini_P_xp, self.W), dim=1)
-        dm = torch.min(torch.norm(torch.matmul(self.W.T, mini_P_x[:, :, None] - mini_P_xms), dim=1), dim=1)[0]
+        dp = self.distance(torch.matmul(mini_P_x,self.W),torch.matmul(mini_P_xp,self.W))
+        dm = torch.min(self.distance(torch.matmul(self.W.T,mini_P_xp[:,:,None]),torch.matmul(self.W.T,mini_P_xms)),dim=1)[0]
 
         return dp,dm
 
 
 class SC_Subspace_Model(Subspace_Model):
 
+    def __init__(self,dim,d,beta,distance_metric):
+        super(SC_Subspace_Model, self).__init__(dim,d,beta)
+        if distance_metric == 'euclidean':
+            self.distance = F.pairwise_distance
+        elif distance_metric == 'cosine':
+            self.distance = F.cosine_similarity
+
     def forward(self,mini_P_x, mini_P_xp, mini_P_xm):
-        dp = torch.norm(torch.matmul(mini_P_x - mini_P_xp, self.W), dim=1)
-        dm = torch.norm(torch.matmul(mini_P_x - mini_P_xm, self.W), dim=1)
+        dp = self.distance(torch.matmul(mini_P_x,self.W),torch.matmul(mini_P_xp,self.W))
+        dm = self.distance(torch.matmul(mini_P_x,self.W),torch.matmul(mini_P_xm,self.W))
 
         return dp,dm

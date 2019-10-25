@@ -23,7 +23,8 @@ base_workspace = {
     'n_epochs':50,
     'emb_dim':300,
     'model':model,
-    'optimizer':torch.optim.Adam
+    'optimizer':torch.optim.Adam,
+    'distance_metric':'cosine'
 }
 mini_func = gp_minimize
 optimize_types = ['subspace_dim','beta','lr','mini_batch_size']
