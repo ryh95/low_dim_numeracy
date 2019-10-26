@@ -126,20 +126,23 @@ def load_dataset(test_type,emb_conf,pre_load=True):
         train_data.number_emb_source = emb_conf['emb_fname']
     return train_data
 
-def init_evaluate(dataset):
+def init_evaluate(dataset,distance_metric):
     losses, accs = [], []
     data_batches = DataLoader(dataset, batch_size=128)
     for mini_batch in data_batches:
         mini_P_x, mini_P_xp, mini_P_xms = mini_batch
 
-        Dp = torch.norm(mini_P_x - mini_P_xp,dim=1)
+        # Dp = torch.norm(mini_P_x - mini_P_xp,dim=1)
+        Dp = distance_metric(mini_P_x,mini_P_xp)
 
         if len(mini_P_xms.size()) == 3:
-            Dm = torch.norm(mini_P_x[:,:,None] - mini_P_xms,dim=1).min(dim=1)[0]
+            Dm = distance_metric(mini_P_x[:,:,None],mini_P_xms).min(dim=1)[0]
+            # Dm = torch.norm(mini_P_x[:,:,None] - mini_P_xms,dim=1).min(dim=1)[0]
         else:
-            Dm = torch.norm(mini_P_x - mini_P_xms, dim=1)
+            Dm = distance_metric(mini_P_x,mini_P_xms)
+            # Dm = torch.norm(mini_P_x - mini_P_xms, dim=1)
 
-        acc = torch.mean((Dp<Dm).float())
+        acc = torch.mean((Dp < Dm).float())
 
         accs.append(acc)
     return torch.mean(torch.stack(accs)).item()

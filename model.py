@@ -101,7 +101,7 @@ class OVA_Subspace_Model(Subspace_Model):
         if distance_metric == 'euclidean':
             self.distance = F.pairwise_distance
         elif distance_metric == 'cosine':
-            self.distance = F.cosine_similarity
+            self.distance = lambda x,y: 1 - F.cosine_similarity(x,y)
 
     def forward(self,mini_P_x, mini_P_xp, mini_P_xms):
         dp = self.distance(torch.matmul(mini_P_x,self.W),torch.matmul(mini_P_xp,self.W))
