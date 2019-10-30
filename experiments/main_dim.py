@@ -19,9 +19,10 @@ base_workspace = {
     'train_verbose':False,
     'n_epochs':50,
     'emb_dim':300,
-    'train_data':load_dataset(experiments,emb_fname),
+    'train_data':load_dataset(experiments,{'emb_fname':emb_fname}),
     'model':model,
-    'optimizer':torch.optim.Adam
+    'optimizer':torch.optim.Adam,
+    'distance_metric':'cosine'
 }
 mini_func = gp_minimize
 optimize_types = ['subspace_dim','beta','lr','mini_batch_size']

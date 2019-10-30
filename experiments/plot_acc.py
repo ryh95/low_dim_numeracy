@@ -10,10 +10,11 @@ from skopt import load
 emb_fname = 'glove.6B.300d' # or 'random'
 dims = [4,8,16,32,64,128]
 sc_accs,ova_accs = [],[]
+distance_type = 'cosine_results'
 for e in ['sc','ova']:
     for dim in dims:
         results_fname = '_'.join(['results', emb_fname, str(dim)])
-        results = load(join(e+'_acc_dim',results_fname)+'.pkl')
+        results = load(join(distance_type,e+'_acc_dim',results_fname)+'.pkl')
         if e == 'sc':
             sc_accs.append(-results.fun)
         else:
