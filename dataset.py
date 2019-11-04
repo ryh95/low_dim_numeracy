@@ -35,18 +35,24 @@ class BaseDataset(Dataset):
             with open(num_emb_fname + '.pickle', 'rb') as f:
                 number_emb_dict = pickle.load(f)
         else:
-
             number_array = list(set(np.array(X).flat))
-
-            if emb_fname == 'random':
-                print('generate random embedding...')
-                d = emb_config['dim']
-                number_emb_dict = {n: np.random.randn(d) for n in number_array}
-                with open(num_emb_fname+'.pickle', 'wb') as handle:
-                    pickle.dump(number_emb_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
-                print('embedding saved')
+            if 'train' in num_emb_fname or 'dev' in num_emb_fname or 'test' in num_emb_fname:
+                read_femb = num_emb_fname.replace('_train','').replace('_dev','').replace('_test','')
+                print('prepare %s from %s' % (num_emb_fname,read_femb))
+                with open(read_femb + '.pickle', 'rb') as f:
+                    read_emb_dict = pickle.load(f)
+                number_emb_dict = {n:read_emb_dict[n] for n in number_array}
+                print('embedding prepared')
             else:
-                number_emb_dict, _ = vocab2vec(number_array, EMB_DIR, num_emb_fname, base_emb, ['pickle'])
+                if 'random' in emb_fname:
+                    print('generate random embedding...')
+                    d = emb_config['dim']
+                    number_emb_dict = {n: np.random.randn(d) for n in number_array}
+                    with open(num_emb_fname+'.pickle', 'wb') as handle:
+                        pickle.dump(number_emb_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                    print('embedding saved')
+                else:
+                    number_emb_dict, _ = vocab2vec(number_array, EMB_DIR, num_emb_fname, base_emb, ['pickle'])
 
         number_emb_dict = {k: torch.from_numpy(v).float() for k,v in number_emb_dict.items()}
 

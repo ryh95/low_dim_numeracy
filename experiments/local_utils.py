@@ -1,3 +1,5 @@
+import pickle
+import random
 import time
 from math import inf
 from os.path import join
@@ -33,6 +35,8 @@ class Minimizer(object):
         best_acc = -inf
 
         mini_batchs = DataLoader(workspace['train_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=0, pin_memory=True)
+        if 'val_data' in workspace:
+            mini_batchs_val = DataLoader(workspace['val_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=0, pin_memory=True)
 
         model = self.model(workspace['subspace_dim'],workspace['emb_dim'],workspace['beta'],workspace['distance_metric'])
 
@@ -67,12 +71,13 @@ class Minimizer(object):
                     # avoid nan gradient
                     loss.backward()
 
-                if i % 5:
-                    if acc.item() > best_acc:
-                        best_W = model.W.data.clone()
-                        best_acc = acc.item()
-                        if workspace['train_verbose']:
-                            print('specialized acc: ', best_acc)
+                if 'val_data' not in workspace:
+                    if i % 5:
+                        if acc.item() > best_acc:
+                            best_W = model.W.data.clone()
+                            best_acc = acc.item()
+                            if workspace['train_verbose']:
+                                print('specialized acc: ', best_acc)
 
                 optimizer.step()
 
@@ -82,8 +87,11 @@ class Minimizer(object):
                 print("train: ", time.time() - start)
 
         # print("Deviation from the constraint: ",torch.norm(best_W.T @ best_W - torch.eye(dim).to(device)).item())
-        model.W = torch.nn.Parameter(best_W)
-        evaluate_acc, evaluate_loss = model.evaluate(mini_batchs)
+        if 'val_data' in workspace:
+            evaluate_acc,_ = model.evaluate(mini_batchs_val)
+        else:
+            model.W = torch.nn.Parameter(best_W)
+            evaluate_acc, evaluate_loss = model.evaluate(mini_batchs)
         return -evaluate_acc
 
     def minimize(self,space,**min_args):
@@ -102,17 +110,16 @@ class Minimizer(object):
 #             res.specs['args']['func'] = None
 #         dump(res, self.checkpoint_path, **self.dump_options)
 
-def load_dataset(test_type,emb_conf,pre_load=True):
-
-    if test_type == 'ova':
-        train_data = OVADataset('ovamag_str', emb_conf)
-    elif test_type == 'sc':
-        train_data = SCDataset('scmag_str', emb_conf)
+def load_dataset(fdata,emb_conf,pre_load=True):
+    if 'ova' in fdata:
+        data = OVADataset(fdata,emb_conf)
+    elif 'sc' in fdata:
+        data = SCDataset(fdata,emb_conf)
     else:
         assert False
     if pre_load:
         # preload all train_data into memory to save time
-        mini_batchs = DataLoader(train_data, batch_size=128, num_workers=8)
+        mini_batchs = DataLoader(data, batch_size=128, num_workers=8)
         P_x, P_xp, P_xms = [], [], []
         for i, mini_batch in enumerate(mini_batchs):
             mini_P_x, mini_P_xp, mini_P_xms = mini_batch
@@ -122,9 +129,9 @@ def load_dataset(test_type,emb_conf,pre_load=True):
         P_x = torch.cat(P_x)
         P_xp = torch.cat(P_xp)
         P_xms = torch.cat(P_xms)
-        train_data = TensorDataset(P_x, P_xp, P_xms)
-        train_data.number_emb_source = emb_conf['emb_fname']
-    return train_data
+        data = TensorDataset(P_x, P_xp, P_xms)
+        data.number_emb_source = emb_conf['emb_fname']
+    return data
 
 def init_evaluate(dataset,distance_metric):
     losses, accs = [], []
@@ -146,3 +153,22 @@ def init_evaluate(dataset,distance_metric):
 
         accs.append(acc)
     return torch.mean(torch.stack(accs)).item()
+
+def train_dev_test_split(data,ratios,fdata):
+    """
+
+    :param data: list, original sc/ova loaded data
+    :param ratios: list, ratio, sum up to 1
+    :return:
+    """
+    random.shuffle(data)
+    begin,end = ratios[0],ratios[0]+ratios[1]
+    begin = int(begin*len(data))
+    end = int(end*len(data))
+    train = data[:begin]
+    dev = data[begin:end]
+    test = data[end:]
+    splited_data = [train,dev,test]
+    for i,name in enumerate(['train','dev','test']):
+        with open(join(DATA_DIR, fdata+'_'+name+'.pkl'), 'wb') as f:
+            pickle.dump(splited_data[i], f, pickle.HIGHEST_PROTOCOL)
