@@ -232,6 +232,6 @@ def obtain_OVA_from_SC(sc_tests):
 
     print('number of ova tests: %d' %(len(ova_tests)))
 
-    np.save('ovamag_str.pkl',ova_tests)
+    np.save('ovamag_str',ova_tests)
     # with open('ovamag_str.pkl', 'wb') as f:
     #     pickle.dump(ova_tests, f, pickle.HIGHEST_PROTOCOL)
