@@ -8,12 +8,13 @@ from skopt import gp_minimize
 from skopt.callbacks import CheckpointSaver
 from skopt.space import Integer, Real, Categorical
 from skopt.utils import dump
+from torch.utils.data import ConcatDataset
 
 from config import DATA_DIR
 from model import OVA_Subspace_Model, SC_Subspace_Model
 from experiments.local_utils import load_dataset, Minimizer, init_evaluate, train_dev_test_split
 
-experiments = 'ova'
+experiments = 'sc'
 if experiments == 'ova':
     model = OVA_Subspace_Model
 elif experiments == 'sc':
@@ -36,6 +37,9 @@ base_workspace = {
     'mini_batch_size':256,
     'emb_dim':300,
     'model':model,
+    'select_inter_model':False,
+    'eval_data': ['val'],
+    'working_status': 'optimize', # 'optimize'/ 'infer' / 'eval'
     'optimizer':torch.optim.Adam,
     'distance_metric':'cosine'
 }
@@ -57,6 +61,22 @@ embs = ['random-1','random-2','random-3','random-4','random-5']
 #     # evaluate the embedding at the original space
 #     init_evaluate(dataset)
 
+# for fname in embs:
+#     emb_conf = {}
+#     if 'random' in fname:
+#         emb_conf['dim'] = 300
+#     emb_conf['emb_fname'] = fname
+#     train_data = load_dataset(ftrain, emb_conf)
+#     val_data = load_dataset(fdev, emb_conf)
+#     base_workspace['train_data'] = train_data
+#     base_workspace['val_data'] = val_data
+#     # results_fname = '_'.join(['results', fname])
+#     # res = skopt.load(results_fname+'.pkl')
+#     eval_accs = minimizer.objective([16, 6, 0.0005])
+#     # train_acc = minimizer.objective(res.x)
+#     print('train acc: %f'%(eval_accs['train']))
+#     print('val acc: %f'%(eval_accs['val']))
+
 for fname in embs:
     emb_conf = {}
     if 'random' in fname:
@@ -66,9 +86,8 @@ for fname in embs:
     dev_data = load_dataset(fdev, emb_conf)
     test_data = load_dataset(ftest, emb_conf)
 
-    base_workspace['train_data'] = train_data
-    base_workspace['val_data'] = dev_data
-    base_workspace['test_data'] = test_data
+    minimizer.base_workspace['train_data'] = train_data
+    minimizer.base_workspace['val_data'] = dev_data
 
     # order should be the same as the "optimize_types"
     space = [Integer(2,128),
@@ -91,3 +110,14 @@ for fname in embs:
 
     results_fname = '_'.join(['results',fname])
     dump(res, results_fname+'.pkl',store_objective=False)
+
+    # train on the train and dev sets and then test on test sets
+    minimizer.base_workspace['train_data'] = ConcatDataset([train_data,dev_data])
+    del minimizer.base_workspace['val_data']
+    minimizer.base_workspace['test_data'] = test_data
+
+    minimizer.base_workspace['working_status'] = 'infer'
+    minimizer.base_workspace['eval_data'] = ['test']
+
+    test_acc = minimizer.objective(res.x)
+    print('test acc: %f'% (test_acc))

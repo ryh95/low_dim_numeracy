@@ -10,6 +10,7 @@ from gensim.models import KeyedVectors
 import scipy.io as sio
 from tqdm import tqdm
 
+from config import DATA_DIR
 
 
 def vocab2vec(vocab, output_dir, output_name, word_emb, savefmt, type='glove', normalize=False, oov_handle='random'):
@@ -105,7 +106,7 @@ def vocab2vec(vocab, output_dir, output_name, word_emb, savefmt, type='glove', n
 def is_number(s):
     try:
         float(s)
-        return True
+        return True if s != 'nan' else False
     except ValueError:
         return False
 
@@ -145,3 +146,92 @@ def preprocess_skipgram2(emb_fname):
                 str_vec = ' '.join(vec)
                 f.write(word + ' ' + str_vec + '\n')
     fin.close()
+
+def obtain_OVA_from_SC(sc_tests):
+    """
+
+    :param sc_tests: list of list of strs
+    :return: none, save ova tests in DATA_DIR with ovamag_str.pkl
+    """
+    number_set = set(np.array(sc_tests).flat)
+    number_array = sorted(number_set, key=lambda x: float(x))
+    max_num = number_array[-1]
+    ch_len = len(max(number_set, key=lambda x: len(x)))
+    l_number_array = len(number_array)
+    ova_tests = np.chararray((l_number_array,l_number_array-2,3),itemsize=ch_len)
+    valid_id = np.ones(l_number_array)
+    for i, n in tqdm(enumerate(number_array)):
+
+        if i == 0 or i == l_number_array - 1:
+            continue
+        x = n
+        n_l1 = number_array[i - 1]
+        n_r1 = number_array[i + 1]
+        ld1 = abs(float(x) - float(n_l1))
+        rd1 = abs(float(x) - float(n_r1))
+
+        if ld1 < rd1:
+            xp = n_l1
+            xm = n_r1
+        elif rd1 < ld1:
+            xp = n_r1
+            xm = n_l1
+        else:
+            # remove the boundary case
+            xp = n_l1
+            xm = max_num
+
+        remain_numbers = number_set - set([x, n_l1, n_r1])
+
+        valid_test = 1
+        for j,m in enumerate(list(remain_numbers) + [xm]):
+            if is_valid_triple([float(n) for n in [x, xp, m]]):
+                ova_tests[i][j] = [x, xp, m]
+            else:
+                valid_test = 0
+                break
+
+        if not valid_test:
+            valid_id[i] = 0
+            # ova_tests.append(one_test)
+
+    # boundary cases
+
+    x = number_array[0]
+    xp = number_array[1]
+    remain_numbers = number_set - set([x, xp])
+
+    valid_test = 1
+    for j,m in enumerate(remain_numbers):
+        if is_valid_triple([float(n) for n in [x, xp, m]]):
+            ova_tests[0][j] = [x,xp,m]
+        else:
+            valid_test = 0
+            break
+
+    if not valid_test:
+        valid_id[0] = 0
+
+    x = number_array[-1]
+    xp = number_array[-2]
+    remain_numbers = number_set - set([x, xp])
+
+    valid_test = 1
+    for j,m in enumerate(remain_numbers):
+        if is_valid_triple([float(n) for n in [x, xp, m]]):
+            ova_tests[-1][j] = [x, xp, m]
+        else:
+            valid_test = 0
+            break
+
+    if not valid_test:
+        valid_id[-1] = 0
+
+    valid_id = valid_id.astype(bool)
+    ova_tests = ova_tests[valid_id,:,:]
+
+    print('number of ova tests: %d' %(len(ova_tests)))
+
+    np.save('ovamag_str.pkl',ova_tests)
+    # with open('ovamag_str.pkl', 'wb') as f:
+    #     pickle.dump(ova_tests, f, pickle.HIGHEST_PROTOCOL)

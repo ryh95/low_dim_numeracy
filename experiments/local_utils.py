@@ -37,6 +37,8 @@ class Minimizer(object):
         mini_batchs = DataLoader(workspace['train_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=0, pin_memory=True)
         if 'val_data' in workspace:
             mini_batchs_val = DataLoader(workspace['val_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=0, pin_memory=True)
+        if 'test_data' in workspace:
+            mini_batchs_test = DataLoader(workspace['test_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=0, pin_memory=True)
 
         model = self.model(workspace['subspace_dim'],workspace['emb_dim'],workspace['beta'],workspace['distance_metric'])
 
@@ -71,7 +73,8 @@ class Minimizer(object):
                     # avoid nan gradient
                     loss.backward()
 
-                if 'val_data' not in workspace:
+                # if 'val_data' not in workspace:
+                if workspace['select_inter_model']:
                     if i % 5:
                         if acc.item() > best_acc:
                             best_W = model.W.data.clone()
@@ -87,12 +90,28 @@ class Minimizer(object):
                 print("train: ", time.time() - start)
 
         # print("Deviation from the constraint: ",torch.norm(best_W.T @ best_W - torch.eye(dim).to(device)).item())
-        if 'val_data' in workspace:
-            evaluate_acc,_ = model.evaluate(mini_batchs_val)
-        else:
+        if workspace['select_inter_model']:
             model.W = torch.nn.Parameter(best_W)
-            evaluate_acc, evaluate_loss = model.evaluate(mini_batchs)
-        return -evaluate_acc
+        evaluate_accs = {}
+        for data in workspace['eval_data']:
+            if data == 'val':
+                print('evaluate on validation set')
+                evaluate_acc, _ = model.evaluate(mini_batchs_val)
+            elif data == 'train':
+                print('evaluate on training set')
+                evaluate_acc, evaluate_loss = model.evaluate(mini_batchs)
+            elif data == 'test':
+                print('evaluate on test set')
+                evaluate_acc, evaluate_loss = model.evaluate(mini_batchs_test)
+            evaluate_accs[data] = evaluate_acc
+
+        # print(workspace['working_status'])
+        if workspace['working_status'] == 'optimize':
+            return -evaluate_accs['val']
+        elif workspace['working_status'] == 'infer':
+            return evaluate_accs['test']
+        elif workspace['working_status'] == 'eval':
+            return evaluate_accs
 
     def minimize(self,space,**min_args):
 
