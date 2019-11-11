@@ -92,6 +92,10 @@ class Minimizer(object):
         # print("Deviation from the constraint: ",torch.norm(best_W.T @ best_W - torch.eye(dim).to(device)).item())
         if workspace['select_inter_model']:
             model.W = torch.nn.Parameter(best_W)
+        if workspace['save_model']:
+            fname = '_'.join([str(i) for i in [workspace['subspace_dim'], workspace['emb_dim'], workspace['beta'],
+                                       workspace['distance_metric'], f"{workspace['lr']:.4f}",workspace['n_epochs']]])+'.pt'
+            torch.save(model.state_dict(),fname)
         evaluate_accs = {}
         for data in workspace['eval_data']:
             if data == 'val':
@@ -168,10 +172,10 @@ def init_evaluate(dataset,distance_metric):
             Dm = distance_metric(mini_P_x,mini_P_xms)
             # Dm = torch.norm(mini_P_x - mini_P_xms, dim=1)
 
-        acc = torch.mean((Dp < Dm).float())
+        acc = torch.sum((Dp < Dm).float())
 
         accs.append(acc)
-    return torch.mean(torch.stack(accs)).item()
+    return (torch.sum(torch.stack(accs))/len(dataset)).item()
 
 def train_dev_test_split(data,ratios,fdata):
     """

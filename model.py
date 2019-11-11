@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 class Subspace_Model(nn.Module):
 
-    def __init__(self,dim,d,beta):
+    def __init__(self,dim,d,beta,distance_metric):
         super(Subspace_Model,self).__init__()
         self.beta = beta
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -16,6 +16,10 @@ class Subspace_Model(nn.Module):
         # self.W = torch.randn((dim, d), requires_grad=True,device=self.device)
         torch.nn.init.orthogonal_(self.W)
         self.W.data = self.W.T.data  # col orthognol
+        if distance_metric == 'euclidean':
+            self.distance = F.pairwise_distance
+        elif distance_metric == 'cosine':
+            self.distance = lambda x,y: 1 - F.cosine_similarity(x,y)
 
 
     def soft_indicator(self,x):
@@ -66,7 +70,7 @@ class Subspace_Model(nn.Module):
 
     def evaluate(self,data_batches):
         """
-        evaluate W on data_batches, i.e., whole training data
+        evaluate W on data_batches, i.e., all data in data batches
         :param data_batches:
         :return:
         """
@@ -81,27 +85,21 @@ class Subspace_Model(nn.Module):
             mini_P_xms = mini_P_xms.to(self.device)
 
             dp, dm = self.forward(mini_P_x, mini_P_xp, mini_P_xms)
-            loss, acc = self.criterion(dp.data, dm.data)
+            objs = self.soft_indicator(dm.data - dp.data)
+            loss = -torch.sum(objs)
+            acc = torch.sum((dp < dm).float())
 
             losses.append(loss)
             accs.append(acc)
             # num_mini_batches += 1
         # print(num_mini_batches)
         # print("evaluate: ", time.time() - start)
-        loss = torch.mean(torch.stack(losses))
-        acc = torch.mean(torch.stack(accs))
+        loss = torch.sum(torch.stack(losses))/len(data_batches.dataset)
+        acc = torch.sum(torch.stack(accs))/len(data_batches.dataset)
         return acc.item(),loss.item()
 
 
 class OVA_Subspace_Model(Subspace_Model):
-
-
-    def __init__(self,dim,d,beta,distance_metric):
-        super(OVA_Subspace_Model, self).__init__(dim,d,beta)
-        if distance_metric == 'euclidean':
-            self.distance = F.pairwise_distance
-        elif distance_metric == 'cosine':
-            self.distance = lambda x,y: 1 - F.cosine_similarity(x,y)
 
     def forward(self,mini_P_x, mini_P_xp, mini_P_xms):
         dp = self.distance(torch.matmul(mini_P_x,self.W),torch.matmul(mini_P_xp,self.W))
@@ -111,13 +109,6 @@ class OVA_Subspace_Model(Subspace_Model):
 
 
 class SC_Subspace_Model(Subspace_Model):
-
-    def __init__(self,dim,d,beta,distance_metric):
-        super(SC_Subspace_Model, self).__init__(dim,d,beta)
-        if distance_metric == 'euclidean':
-            self.distance = F.pairwise_distance
-        elif distance_metric == 'cosine':
-            self.distance = lambda x,y: 1 - F.cosine_similarity(x,y)
 
     def forward(self,mini_P_x, mini_P_xp, mini_P_xm):
         dp = self.distance(torch.matmul(mini_P_x,self.W),torch.matmul(mini_P_xp,self.W))
