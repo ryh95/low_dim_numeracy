@@ -11,6 +11,7 @@ from skopt.callbacks import CheckpointSaver
 from skopt.space import Real, Integer, Categorical
 from skopt.utils import use_named_args
 from torch.utils.data import DataLoader
+import torch.nn.functional as F
 
 from tqdm import tqdm
 
@@ -21,7 +22,7 @@ from utils import is_number
 # collect data
 # X: embedding, Y: label(number or not)
 # emb_type = 'random'
-emb = 'skipgram-5'
+emb = 'skipgram-5.txt'
 number_emb,word_emb = [],[]
 with open(join(EMB_DIR,emb), 'r') as f:
     if 'skipgram' in emb:
@@ -87,20 +88,41 @@ y_pred = svc.predict(X)
 np.save('svm_default_predict.npy',y_pred)
 print(f1_score(y,y_pred))
 
-dataset = load_dataset('scmag_str', {'emb_fname':'skipgram-5_num'})
+dataset = load_dataset('ovamag_str', {'emb_fname':'skipgram-5_num'})
+
+# evaluate embs in the original space
+def cosine_distance(x,y):
+    if len(y.size()) == 3:
+        x = x[:,:,None]
+    return 1 - F.cosine_similarity(x, y)
+
+print(init_evaluate(dataset,cosine_distance))
+
 # poly kernel
 
-# def kernel_sim(x,y,gamma,r,d):
-#     if len(y.size()) == 3:
-#         # ova
-#         (gamma * torch.bmm(x.unsqueeze(1), y) + r) ** d
-#     else:
+def kernel_sim(x,y,gamma,r,d):
+    if len(x.size()) == 2 and len(y.size()) == 2:
+        # x: B,d y: B,d
+        inner_product = torch.sum(x * y,dim=1)
+    elif len(x.size()) == 3 and len(y.size()) == 3:
+        # x: B,d,n-2 y: B,d,n-2
+        inner_product = torch.sum(x * y,dim=1)
+    elif len(x.size()) == 2 and len(y.size()) == 3:
+        # x: B,d y: B,d,n-2
+        inner_product = (x[:,None,:] @ y).squeeze()
+    else:
+        assert False
+    return (gamma * inner_product + r) ** d
 
-kernel_sim = lambda x,y,gamma,r,d: (gamma*torch.bmm(x.unsqueeze(1),y.unsqueeze(2))+r)**d
 # distance function, cosine distance
-distance_func = lambda x,y, \
-                       gamma=params['gamma'],r=params['coef0'],d=params['degree']: \
-    1 - kernel_sim(x,y,gamma,r,d) / ((kernel_sim(x,x,gamma,r,d) ** 0.5)*(kernel_sim(y,y,gamma,r,d) ** 0.5))
+def distance_func(x,y,gamma=params['gamma'],r=params['coef0'],d=params['degree']):
+    k_xy = kernel_sim(x, y, gamma, r, d)
+    k_xx = kernel_sim(x, x, gamma, r, d)
+    if len(y.size()) == 3:
+        k_xx = k_xx[:,None]
+    k_yy = kernel_sim(y, y, gamma, r, d)
+    return 1 - k_xy / ((k_xx ** 0.5) * (k_yy ** 0.5))
+
 acc = init_evaluate(dataset,distance_func)
 print(acc)
 # print('best f1 score: %f' % res_gp.fun)

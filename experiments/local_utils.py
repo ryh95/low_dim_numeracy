@@ -166,7 +166,7 @@ def init_evaluate(dataset,distance_metric):
         Dp = distance_metric(mini_P_x,mini_P_xp)
 
         if len(mini_P_xms.size()) == 3:
-            Dm = distance_metric(mini_P_x[:,:,None],mini_P_xms).min(dim=1)[0]
+            Dm = distance_metric(mini_P_x,mini_P_xms).min(dim=1)[0]
             # Dm = torch.norm(mini_P_x[:,:,None] - mini_P_xms,dim=1).min(dim=1)[0]
         else:
             Dm = distance_metric(mini_P_x,mini_P_xms)
