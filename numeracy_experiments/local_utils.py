@@ -1,7 +1,10 @@
 import pickle
+import time
+from math import ceil
 from os.path import join
 import numpy as np
 import torch
+from joblib import Parallel, delayed
 from sklearn.metrics import f1_score
 from tqdm import tqdm
 
@@ -119,3 +122,12 @@ class Minimizer(object):
     def minimize(self,space,**min_args):
 
         return self.mini_func(self.objective, space, **min_args)
+
+def parallel_predict(X,predict_func,n_cores):
+    n_samples = X.shape[0]
+    slices = [(ceil(n_samples * i / n_cores), ceil(n_samples * (i + 1) / n_cores)) for i in range(n_cores)]
+    start = time.time()
+    y_pred = np.concatenate(Parallel(n_jobs=n_cores)(
+        delayed(predict_func)(X[slices[i_core][0]:slices[i_core][1], :]) for i_core in range(n_cores)))
+    print('predict time: ', time.time() - start)
+    return y_pred

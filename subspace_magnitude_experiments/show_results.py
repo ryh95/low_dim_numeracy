@@ -16,7 +16,7 @@ import torch.nn.functional as F
 #         aver_res.append(res.fun)
 # print(np.mean(aver_res))
 
-from experiments.local_utils import load_dataset, init_evaluate
+from subspace_magnitude_experiments.local_utils import load_dataset, init_evaluate
 
 # embs = ['glove.6B.300d','glove.840B.300d','wiki-news-300d-1M-subword_num','crawl-300d-2M-subword_num','skipgram-2_num','skipgram-5_num']
 embs = ['random-1','random-2','random-3','random-4','random-5']
