@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 from config import EMB, EMB_DIR, DATA_DIR
 from subspace_magnitude_experiments.local_utils import load_dataset, init_evaluate
-from numeracy_experiments.local_utils import KernelDistance, cosine_distance, prepare_fitting_data, Minimizer, \
+from numeracy_experiments.local_utils import KernelDistance, cosine_distance, prepare_separation_data, Minimizer, \
     parallel_predict
 from utils import is_number, is_valid_triple
 
@@ -28,7 +28,7 @@ from utils import is_number, is_valid_triple
 # X: embedding, Y: label(number or not)
 # emb_type = 'random'
 femb = 'skipgram-5.txt'
-X,y = prepare_fitting_data(femb)
+X,y = prepare_separation_data(femb)
 
 # if emb_type == 'pre-train':
 #

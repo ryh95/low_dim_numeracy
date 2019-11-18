@@ -1,12 +1,17 @@
 import pickle
 import time
-from math import ceil
+from math import ceil, sqrt
 from os.path import join
 import numpy as np
 import torch
 from joblib import Parallel, delayed
-from sklearn.metrics import f1_score
+from keras import Sequential
+from keras.layers import Dense, Dropout
+from keras.optimizers import Adam
+from keras.wrappers.scikit_learn import KerasRegressor
+from sklearn.metrics import f1_score, mean_squared_error
 from tqdm import tqdm
+from keras import backend as K
 
 from config import EMB_DIR, DATA_DIR
 from utils import is_valid_triple, is_number
@@ -66,7 +71,7 @@ def cosine_distance(x,y):
         x = x[:,:,None]
     return 1 - F.cosine_similarity(x, y)
 
-def prepare_fitting_data(femb):
+def prepare_separation_data(femb):
     '''
 
     :param femb: 'skipgram-5.txt'
@@ -98,6 +103,32 @@ def prepare_fitting_data(femb):
     print('word embedding: ',X_word.shape)
     return X,y
 
+def prepare_magnitude_data(femb):
+    '''
+    prepare data for regression, X, number embedding, y, number value(represents magnitude)
+    :param femb:
+    :return:
+    '''
+    number_emb,number_target = [],[]
+    print('prepare fitting data...')
+    with open(join(EMB_DIR, femb), 'r') as f:
+        if 'skipgram' in femb:
+            f.readline()  # skipgram-5.txt
+        for line in tqdm(f):
+            word, *vec = line.rstrip().split(' ')
+            vec = np.array(vec, dtype=float)
+            if 'skipgram' in femb:
+                word = word.split('_')[0]  # skipgram-5.txt
+            if is_number(word):
+                if np.isinf(float(word)): continue
+                number_emb.append(vec)
+                number_target.append(float(word))
+
+    X = np.stack(number_emb)
+    y = np.array(number_target)
+    print('number embedding: ',X.shape)
+    return X,y
+
 class Minimizer(object):
 
     def __init__(self,base_workspace, optimize_types, mini_func):
@@ -122,6 +153,53 @@ class Minimizer(object):
     def minimize(self,space,**min_args):
 
         return self.mini_func(self.objective, space, **min_args)
+
+class MagnitudeAxisMinimizer(Minimizer):
+
+    def objective(self,feasible_point):
+        optimize_workspace = {type: type_values for type, type_values in zip(self.optimize_types, feasible_point)}
+
+        X_train = self.base_workspace['X_train']
+        y_train = self.base_workspace['y_train']
+        X_val = self.base_workspace['X_val']
+        y_val = self.base_workspace['y_val']
+
+        if hasattr(self,'model_fixed_params'):
+            model = self.model(**optimize_workspace,**self.model_fixed_params)
+        else:
+            model = self.model(**optimize_workspace)
+
+        try:
+            if isinstance(model,KerasRegressor):
+                K.clear_session()
+                model.fit(X_train,y_train,verbose=0)
+            else:
+                model.fit(X_train,y_train)
+            y_pred_val = model.predict(X_val)
+            error = mean_squared_error(y_val, y_pred_val)
+        except np.linalg.LinAlgError:
+            error = 1e+30
+        return error
+
+def build_nn(n_hidden_units=64,lr=0.001):
+    model = Sequential()
+    model.add(Dense(n_hidden_units, activation='relu', input_dim=300))
+    model.add(Dropout(0.1))
+    model.add(Dense(1))
+    adam = Adam(learning_rate=lr)
+    model.compile(optimizer=adam,
+                  loss='mse')
+    return model
+
+def fit_test_best_model(model,X,y,X_test,y_test,**best_params):
+    model = model(**best_params)
+    if isinstance(model,KerasRegressor):
+        model.fit(X, y, verbose=0)
+    else:
+        model.fit(X,y)
+    y_test_pred = model.predict(X_test)
+    error = sqrt(mean_squared_error(y_test, y_test_pred))
+    return error
 
 def parallel_predict(X,predict_func,n_cores):
     n_samples = X.shape[0]

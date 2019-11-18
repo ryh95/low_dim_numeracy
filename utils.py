@@ -105,8 +105,7 @@ def vocab2vec(vocab, output_dir, output_name, word_emb, savefmt, type='glove', n
 
 def is_number(s):
     try:
-        float(s)
-        return True if s != 'nan' else False
+        return True if not np.isnan(float(s)) else False
     except ValueError:
         return False
 

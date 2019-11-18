@@ -6,10 +6,10 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.utils import shuffle
 
-from numeracy_experiments.local_utils import prepare_fitting_data, parallel_predict
+from numeracy_experiments.local_utils import prepare_separation_data, parallel_predict
 
 femb = 'skipgram-5.txt'
-X,y = prepare_fitting_data(femb)
+X,y = prepare_separation_data(femb)
 
 # if emb_type == 'pre-train':
 #
