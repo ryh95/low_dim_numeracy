@@ -2,17 +2,19 @@ import math
 import pickle
 import random
 from collections import defaultdict
+from os.path import join
 
 import numpy as np
 
 from tqdm import tqdm
 
-from config import EMB
+from config import EMB, EMB_DIR
 from utils import is_number, is_valid_triple, obtain_OVA_from_SC
 
+femb = 'skipgram-5_num'
 # collect numbers from word embedding
 numbers = defaultdict(list)
-with open(EMB,'r') as f:
+with open(join(EMB_DIR,femb+'.txt'),'r') as f:
     for line in tqdm(f):
         word, *vec = line.rstrip().split(' ')
         if is_number(word):
@@ -26,8 +28,9 @@ rem_numbers = [v[0] for k,v in numbers.items()]
 s_numbers = sorted(rem_numbers,key=lambda x: float(x))
 
 # prepare (x,x_+,x_-) triples(sc)
-x_triples = []
 len_s = len(s_numbers)
+x_triples = np.empty((len_s,3),dtype=np.object)
+valid_id = np.ones(len_s)
 for i,n in enumerate(s_numbers):
     if i == 0 or i == 1 or i == len_s -1 or i == len_s - 2:
         continue
@@ -73,11 +76,11 @@ for i,n in enumerate(s_numbers):
             x_triple.append(n_l1)
 
     # debug: check the triple
-    if not is_valid_triple([float(n) for n in x_triple]):
+    if is_valid_triple([float(n) for n in x_triple]):
+        x_triples[i,:] = x_triple
+    else:
         print(x_triple)
-    assert is_valid_triple([float(n) for n in x_triple]),print(x_triple)
-
-    x_triples.append(x_triple)
+        valid_id[i] = 0
 
 ## deal with the boundary case
 ## i = 0,1,n,n-1
@@ -85,7 +88,9 @@ for i,n in enumerate(s_numbers):
 # i = 0
 x_triple = [s_numbers[0],s_numbers[1],s_numbers[2]]
 if is_valid_triple([float(n) for n in x_triple]):
-    x_triples.append(x_triple)
+    x_triples[0,:] = x_triple
+else:
+    valid_id[0] = 0
 
 # i = 1
 n_l1 = s_numbers[0]
@@ -111,12 +116,16 @@ else:
     else:
         x_triple.append(n_r2)
 if is_valid_triple([float(n) for n in x_triple]):
-    x_triples.append(x_triple)
+    x_triples[1,:] = x_triple
+else:
+    valid_id[1] = 0
 
 # i = n
 x_triple = [s_numbers[-1],s_numbers[-2],s_numbers[-3]]
 if is_valid_triple([float(n) for n in x_triple]):
-    x_triples.append(x_triple)
+    x_triples[-1,:] = x_triple
+else:
+    valid_id[-1] = 0
 
 # i = n-1
 x_triple = []
@@ -142,11 +151,15 @@ else:
     else:
         x_triple.append(n_l2)
 if is_valid_triple([float(n) for n in x_triple]):
-    x_triples.append(x_triple)
+    x_triples[-2,:] = x_triple
+else:
+    valid_id[-2] = 0
+
+valid_id = valid_id.astype(bool)
+x_triples = x_triples[valid_id,:]
 
 print('number of sc tests: %d' %(len(x_triples)))
-with open('scmag_str.pickle','wb') as f:
-    pickle.dump(x_triples,f,pickle.HIGHEST_PROTOCOL)
+np.save(femb+'_scmag_str',x_triples)
 
 # prepare ova according to sc
-obtain_OVA_from_SC(x_triples)
+obtain_OVA_from_SC(x_triples,femb)

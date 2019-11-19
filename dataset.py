@@ -24,11 +24,12 @@ class BaseDataset(Dataset):
         :param fname: file name of the OVA test, e.g. 'data/ovamag.pkl'
         :param emb_config: {"emb_fname": 'random'/'glove.6B.300d',"dim":300(random)}
         """
-        with open(join(DATA_DIR, fname + '.pkl'), 'rb') as f:
-            X = pickle.load(f)
+        X = np.load(join(DATA_DIR,fname+'.npy'),allow_pickle=True)
+        # with open(join(DATA_DIR, fname + '.pkl'), 'rb') as f:
+        #     X = pickle.load(f)
 
         emb_fname = emb_config['emb_fname'] # embedding file name used to create number embedding
-        num_emb_fname = join(EMB_DIR, emb_fname + '_' + fname + '_num_emb') # embedding file name for numbers in OVA
+        num_emb_fname = join(EMB_DIR, fname + '_num_emb') # embedding file name for numbers in OVA
         base_emb = join(EMB_DIR, emb_fname + '.txt') # add suffix
 
         if isfile(num_emb_fname + '.pickle'):
@@ -37,11 +38,18 @@ class BaseDataset(Dataset):
         else:
             number_array = list(set(np.array(X).flat))
             if 'train' in num_emb_fname or 'dev' in num_emb_fname or 'test' in num_emb_fname:
-                read_femb = num_emb_fname.replace('_train','').replace('_dev','').replace('_test','')
-                print('prepare %s from %s' % (num_emb_fname,read_femb))
-                with open(read_femb + '.pickle', 'rb') as f:
-                    read_emb_dict = pickle.load(f)
-                number_emb_dict = {n:read_emb_dict[n] for n in number_array}
+                num_emb_parent_femb = num_emb_fname.replace('_train','').replace('_dev','').replace('_test','')
+                print('prepare %s from %s' % (num_emb_fname,num_emb_parent_femb))
+                if not os.path.isfile(num_emb_parent_femb+'.pickle'):
+                    print('%s not found, prepare...'%(num_emb_parent_femb))
+                    fname_parent = fname.replace('_train','').replace('_dev','').replace('_test','')
+                    X_parent = np.load(join(DATA_DIR,fname_parent+'.npy'),allow_pickle=True)
+                    number_array_parent = list(set(np.array(X_parent).flat))
+                    number_emb_parent_dict, _ = vocab2vec(number_array_parent, EMB_DIR, num_emb_parent_femb, base_emb, ['pickle'])
+                else:
+                    with open(num_emb_parent_femb + '.pickle', 'rb') as f:
+                        number_emb_parent_dict = pickle.load(f)
+                number_emb_dict = {n:number_emb_parent_dict[n] for n in number_array}
                 print('embedding prepared')
             else:
                 if 'random' in emb_fname:

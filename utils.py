@@ -9,7 +9,7 @@ import torch
 from gensim.models import KeyedVectors
 import scipy.io as sio
 from tqdm import tqdm
-
+import torch.nn.functional as F
 from config import DATA_DIR
 
 
@@ -146,7 +146,7 @@ def preprocess_skipgram2(emb_fname):
                 f.write(word + ' ' + str_vec + '\n')
     fin.close()
 
-def obtain_OVA_from_SC(sc_tests):
+def obtain_OVA_from_SC(sc_tests,fname):
     """
 
     :param sc_tests: list of list of strs
@@ -231,6 +231,43 @@ def obtain_OVA_from_SC(sc_tests):
 
     print('number of ova tests: %d' %(len(ova_tests)))
 
-    np.save('ovamag_str',ova_tests)
+    np.save(fname+'_ovamag_str',ova_tests)
     # with open('ovamag_str.pkl', 'wb') as f:
     #     pickle.dump(ova_tests, f, pickle.HIGHEST_PROTOCOL)
+
+class KernelDistance(object):
+
+    def __int__(self,*kernel_setting):
+
+        self.kernel_setting = kernel_setting
+
+    def kernel_sim(self,x,y,kernel_type,gamma,r,d):
+        if len(x.size()) == 2 and len(y.size()) == 2:
+            # x: B,d y: B,d
+            inner_product = torch.sum(x * y,dim=1)
+        elif len(x.size()) == 3 and len(y.size()) == 3:
+            # x: B,d,n-2 y: B,d,n-2
+            inner_product = torch.sum(x * y,dim=1)
+        elif len(x.size()) == 2 and len(y.size()) == 3:
+            # x: B,d y: B,d,n-2
+            inner_product = (x[:,None,:] @ y).squeeze()
+        else:
+            assert False
+        if kernel_type == 'poly':
+            return (gamma * inner_product + r) ** d
+        elif kernel_type == 'sigmoid':
+            return torch.tanh(gamma * inner_product + r)
+
+    def distance_func(self,x,y):
+        _,kernel_type,d,gamma,r = self.kernel_setting
+        k_xy = self.kernel_sim(x, y, kernel_type, gamma, r, d)
+        k_xx = self.kernel_sim(x, x, kernel_type, gamma, r, d)
+        if len(y.size()) == 3:
+            k_xx = k_xx[:,None]
+        k_yy = self.kernel_sim(y, y, kernel_type, gamma, r, d)
+        return 1 - k_xy / ((k_xx ** 0.5) * (k_yy ** 0.5))
+
+def cosine_distance(x,y):
+    if len(y.size()) == 3:
+        x = x[:,:,None]
+    return 1 - F.cosine_similarity(x, y)

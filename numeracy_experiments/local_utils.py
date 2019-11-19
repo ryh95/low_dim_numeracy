@@ -15,7 +15,6 @@ from keras import backend as K
 
 from config import EMB_DIR, DATA_DIR
 from utils import is_valid_triple, is_number
-import torch.nn.functional as F
 
 def test_on_svm_w(svc,test_dataset,test_femb):
     num_emb_fname = join(EMB_DIR, test_femb + '_' + test_dataset + '_num_emb')
@@ -33,43 +32,6 @@ def test_on_svm_w(svc,test_dataset,test_femb):
         triple = [test_num_magnitude[e] for e in test]
         test_results.append(1 if is_valid_triple(triple) else 0)
     print('acc on proj w: ', np.mean(test_results))
-
-class KernelDistance(object):
-
-    def __int__(self,*kernel_setting):
-
-        self.kernel_setting = kernel_setting
-
-    def kernel_sim(self,x,y,kernel_type,gamma,r,d):
-        if len(x.size()) == 2 and len(y.size()) == 2:
-            # x: B,d y: B,d
-            inner_product = torch.sum(x * y,dim=1)
-        elif len(x.size()) == 3 and len(y.size()) == 3:
-            # x: B,d,n-2 y: B,d,n-2
-            inner_product = torch.sum(x * y,dim=1)
-        elif len(x.size()) == 2 and len(y.size()) == 3:
-            # x: B,d y: B,d,n-2
-            inner_product = (x[:,None,:] @ y).squeeze()
-        else:
-            assert False
-        if kernel_type == 'poly':
-            return (gamma * inner_product + r) ** d
-        elif kernel_type == 'sigmoid':
-            return torch.tanh(gamma * inner_product + r)
-
-    def distance_func(self,x,y):
-        _,kernel_type,d,gamma,r = self.kernel_setting
-        k_xy = self.kernel_sim(x, y, kernel_type, gamma, r, d)
-        k_xx = self.kernel_sim(x, x, kernel_type, gamma, r, d)
-        if len(y.size()) == 3:
-            k_xx = k_xx[:,None]
-        k_yy = self.kernel_sim(y, y, kernel_type, gamma, r, d)
-        return 1 - k_xy / ((k_xx ** 0.5) * (k_yy ** 0.5))
-
-def cosine_distance(x,y):
-    if len(y.size()) == 3:
-        x = x[:,:,None]
-    return 1 - F.cosine_similarity(x, y)
 
 def prepare_separation_data(femb):
     '''

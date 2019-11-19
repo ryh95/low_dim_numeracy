@@ -75,7 +75,7 @@ class Minimizer(object):
 
                 # if 'val_data' not in workspace:
                 if workspace['select_inter_model']:
-                    if i % 5:
+                    if i % 5 == 0:
                         if acc.item() > best_acc:
                             best_W = model.W.data.clone()
                             best_acc = acc.item()
@@ -188,10 +188,11 @@ def train_dev_test_split(data,ratios,fdata):
     begin,end = ratios[0],ratios[0]+ratios[1]
     begin = int(begin*len(data))
     end = int(end*len(data))
-    train = data[:begin]
-    dev = data[begin:end]
-    test = data[end:]
+    train = data[:begin,:]
+    dev = data[begin:end,:]
+    test = data[end:,:]
     splited_data = [train,dev,test]
     for i,name in enumerate(['train','dev','test']):
-        with open(join(DATA_DIR, fdata+'_'+name+'.pkl'), 'wb') as f:
-            pickle.dump(splited_data[i], f, pickle.HIGHEST_PROTOCOL)
+        np.save(join(DATA_DIR, fdata+'_'+name),splited_data[i])
+        # with open(join(DATA_DIR, fdata+'_'+name+'.pkl'), 'wb') as f:
+        #     pickle.dump(splited_data[i], f, pickle.HIGHEST_PROTOCOL)
