@@ -22,11 +22,16 @@ femb = 'skipgram-5.txt'
 
 X,y = prepare_magnitude_data(femb)
 
+# filter the data due to the skewed magnitude distribution
+filters = y<10000
+X = X[filters,:]
+y = y[filters]
+
 # train,val,test split
 # train:0.65, val:0.15 test:0.2
 run_random = True
-test_models = ['ridge','kernel_ridge','nn']
-n_trials = 5
+test_models = ['ridge','kernel_ridge']
+n_trials = 10
 if run_random:
     results = np.zeros((2,len(test_models),n_trials))
 else:
@@ -127,7 +132,7 @@ for k in range(n_trials):
                 fresults = model + '_results.pkl'
 
             checkpoint_callback = CheckpointSaver(fcheckpoint, store_objective=False)
-            res = minimizer.minimize(space, n_calls=50, callback=[checkpoint_callback], verbose=True, x0=x0)
+            res = minimizer.minimize(space, n_calls=70, callback=[checkpoint_callback], verbose=True, x0=x0)
             dump(res, fresults, store_objective=False)
 
             params = {type: v for type, v in zip(minimizer.optimize_types, res.x)}

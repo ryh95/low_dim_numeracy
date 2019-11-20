@@ -71,8 +71,10 @@ def prepare_magnitude_data(femb):
     :param femb:
     :return:
     '''
+    # todo: possible duplicate with utils/preprocess_google_news_skip
     number_emb,number_target = [],[]
     print('prepare fitting data...')
+    # n_integer = 0
     with open(join(EMB_DIR, femb), 'r') as f:
         if 'skipgram' in femb:
             f.readline()  # skipgram-5.txt
@@ -83,6 +85,7 @@ def prepare_magnitude_data(femb):
                 word = word.split('_')[0]  # skipgram-5.txt
             if is_number(word):
                 if np.isinf(float(word)): continue
+                # if float(word).is_integer(): n_integer += 1
                 number_emb.append(vec)
                 number_target.append(float(word))
 
