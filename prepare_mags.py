@@ -159,7 +159,7 @@ valid_id = valid_id.astype(bool)
 x_triples = x_triples[valid_id,:]
 
 print('number of sc tests: %d' %(len(x_triples)))
-np.save(femb+'_scmag_str',x_triples)
+np.save(femb[:-4]+'_sc',x_triples) # remove '_num' suffix
 
 # prepare ova according to sc
 obtain_OVA_from_SC(x_triples,femb)

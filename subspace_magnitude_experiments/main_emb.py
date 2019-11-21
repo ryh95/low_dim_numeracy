@@ -23,16 +23,15 @@ elif experiments == 'sc':
     model = SC_Subspace_Model
 else:
     assert False
-fembs = ['skipgram-5_num']
-fnames = {}
-for femb in fembs:
-    f_train_dev_test = [femb + '_' + experiments + 'mag_str_' + name for name in ['train','dev','test']]
+num_sources = ['skipgram-5']
+fsrc_datas = {}
+for src in num_sources:
+    f_train_dev_test = [src + '_' + experiments + '_' + name for name in ['train','dev','test']]
     if not isfile(join(DATA_DIR,f_train_dev_test[0]+'.npy')):
         print('prepare train dev and test')
-        X = np.load(join(DATA_DIR, femb + '_' + experiments + 'mag_str.npy'),allow_pickle=True)
-        train_dev_test_split(X,[0.65,0.15,0.2],femb + '_' + experiments + 'mag_str')
-    fnames[femb] = f_train_dev_test
-
+        X = np.load(join(DATA_DIR, src + '_' + experiments + '.npy'),allow_pickle=True)
+        train_dev_test_split(X,[0.65,0.15,0.2],src + '_' + experiments)
+    fsrc_datas[src] = f_train_dev_test
 
 base_workspace = {
     'train_verbose':False,
@@ -95,53 +94,58 @@ minimizer = Minimizer(base_workspace, optimize_types, mini_func)
 #     print('train acc: %f'%(eval_accs['train']))
 #     # print('val acc: %f'%(eval_accs['val']))
 
-for femb in fembs:
-    emb_conf = {'emb_fname':femb}
-    test_dataset = load_dataset(fnames[femb][-1],emb_conf,pre_load=False)
-    print(init_evaluate(test_dataset,cosine_distance))
-exit()
+fembs = ['random']
+for src in num_sources:
+    for femb in fembs:
+        emb_conf = {}
+        if 'random' in femb:
+            emb_conf['dim'] = 300
+        emb_conf['emb_fname'] = femb
+        test_dataset = load_dataset(fsrc_datas[src][-1], emb_conf, pre_load=False)
+        print('test acc in original space of %s: %.4f'%(femb,init_evaluate(test_dataset,cosine_distance)))
 
-for femb in fembs:
-    emb_conf = {}
-    if 'random' in femb:
-        emb_conf['dim'] = 300
-    emb_conf['emb_fname'] = femb
-    datasets = []
-    for fdata in fnames[femb]:
-        datasets.append(load_dataset(fdata, emb_conf,pre_load=False))
+for src in num_sources:
+    for femb in fembs:
+        emb_conf = {}
+        if 'random' in femb:
+            emb_conf['dim'] = 300
+        emb_conf['emb_fname'] = femb
+        datas = []
+        for fdata in fsrc_datas[src]:
+            datas.append(load_dataset(fdata, emb_conf, pre_load=False))
 
-    minimizer.base_workspace['train_data'] = datasets[0]
-    minimizer.base_workspace['val_data'] = datasets[1]
+        minimizer.base_workspace['train_data'] = datas[0]
+        minimizer.base_workspace['val_data'] = datas[1]
 
-    # order should be the same as the "optimize_types"
-    space = [Integer(2,128),
-             Integer(1, 30),
-             Real(10 ** -5, 10 ** 0, "log-uniform"),
-             ]
+        # order should be the same as the "optimize_types"
+        space = [Integer(2,128),
+                 Integer(1, 30),
+                 Real(10 ** -5, 10 ** 0, "log-uniform"),
+                 ]
 
-    checkpoint_fname = femb + '_checkpoint.pkl'
-    checkpoint_callback = CheckpointSaver(checkpoint_fname, store_objective=False)
+        checkpoint_fname = femb + '_checkpoint.pkl'
+        checkpoint_callback = CheckpointSaver(checkpoint_fname, store_objective=False)
 
-    # load checkpoint if there exists checkpoint, otherwise from scratch
-    if os.path.isfile(checkpoint_fname):
-        print('load checkpoint and continue optimization')
-        int_res = skopt.load(checkpoint_fname)
-        x0,y0 = int_res.x_iters,int_res.func_vals
-        res = minimizer.minimize(space, x0=x0, y0=y0, n_calls=50-len(x0), callback=[checkpoint_callback], verbose=True)
-    else:
-        x0 = [64,6,0.005]
-        res = minimizer.minimize(space, x0=x0, n_calls=50, callback=[checkpoint_callback], verbose=True)
+        # load checkpoint if there exists checkpoint, otherwise from scratch
+        if os.path.isfile(checkpoint_fname):
+            print('load checkpoint and continue optimization')
+            int_res = skopt.load(checkpoint_fname)
+            x0,y0 = int_res.x_iters,int_res.func_vals
+            res = minimizer.minimize(space, x0=x0, y0=y0, n_calls=50-len(x0), callback=[checkpoint_callback], verbose=True)
+        else:
+            x0 = [64,6,0.005]
+            res = minimizer.minimize(space, x0=x0, n_calls=50, callback=[checkpoint_callback], verbose=True)
 
-    results_fname = '_'.join(['results', femb])
-    dump(res, results_fname+'.pkl',store_objective=False)
+        results_fname = '_'.join(['results', femb])
+        dump(res, results_fname+'.pkl',store_objective=False)
 
-    # train on the train and dev sets and then test on test sets
-    minimizer.base_workspace['train_data'] = ConcatDataset([datasets[0],datasets[1]])
-    del minimizer.base_workspace['val_data']
-    minimizer.base_workspace['test_data'] = datasets[2]
+        # train on the train and dev sets and then test on test sets
+        minimizer.base_workspace['train_data'] = ConcatDataset([datas[0], datas[1]])
+        del minimizer.base_workspace['val_data']
+        minimizer.base_workspace['test_data'] = datas[2]
 
-    minimizer.base_workspace['working_status'] = 'infer'
-    minimizer.base_workspace['eval_data'] = ['test']
+        minimizer.base_workspace['working_status'] = 'infer'
+        minimizer.base_workspace['eval_data'] = ['test']
 
-    test_acc = minimizer.objective(res.x)
-    print('test acc: %f'% (test_acc))
+        test_acc = minimizer.objective(res.x)
+        print('test acc: %f'% (test_acc))

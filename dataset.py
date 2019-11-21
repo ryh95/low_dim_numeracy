@@ -18,54 +18,67 @@ https://pytorch.org/tutorials/beginner/data_loading_tutorial.html
 
 class BaseDataset(Dataset):
 
-    def __init__(self, fname, emb_config):
+    def __init__(self, fdata, emb_config):
         """
 
-        :param fname: file name of the OVA test, e.g. 'data/ovamag.pkl'
+        :param fdata: file name of the OVA test, e.g. 'data/ovamag.pkl'
         :param emb_config: {"emb_fname": 'random'/'glove.6B.300d',"dim":300(random)}
         """
-        X = np.load(join(DATA_DIR,fname+'.npy'),allow_pickle=True)
+        X = np.load(join(DATA_DIR, fdata + '.npy'), allow_pickle=True)
         # with open(join(DATA_DIR, fname + '.pkl'), 'rb') as f:
         #     X = pickle.load(f)
 
-        emb_fname = emb_config['emb_fname'] # embedding file name used to create number embedding
-        num_emb_fname = join(EMB_DIR, fname + '_num_emb') # embedding file name for numbers in OVA
-        base_emb = join(EMB_DIR, emb_fname + '.txt') # add suffix
+        femb = emb_config['emb_fname'] # embedding file name used to create number embedding
+        if femb == 'random':
+            # fdata_emb = join(EMB_DIR, fdata + '_' + femb + '_emb')
+            fdata_emb = fdata + '_' + femb + '_emb'
+        else:
+            # fdata_emb = join(EMB_DIR, fdata + '_emb')
+            fdata_emb = fdata + '_emb'
 
-        if isfile(num_emb_fname + '.pickle'):
-            with open(num_emb_fname + '.pickle', 'rb') as f:
-                number_emb_dict = pickle.load(f)
+        if isfile(join(EMB_DIR,fdata_emb + '.pickle')):
+            with open(join(EMB_DIR,fdata_emb + '.pickle'), 'rb') as f:
+                data_emb = pickle.load(f)
         else:
             number_array = list(set(np.array(X).flat))
-            if 'train' in num_emb_fname or 'dev' in num_emb_fname or 'test' in num_emb_fname:
-                num_emb_parent_femb = num_emb_fname.replace('_train','').replace('_dev','').replace('_test','')
-                print('prepare %s from %s' % (num_emb_fname,num_emb_parent_femb))
-                if not os.path.isfile(num_emb_parent_femb+'.pickle'):
-                    print('%s not found, prepare...'%(num_emb_parent_femb))
-                    fname_parent = fname.replace('_train','').replace('_dev','').replace('_test','')
-                    X_parent = np.load(join(DATA_DIR,fname_parent+'.npy'),allow_pickle=True)
-                    number_array_parent = list(set(np.array(X_parent).flat))
-                    number_emb_parent_dict, _ = vocab2vec(number_array_parent, EMB_DIR, num_emb_parent_femb, base_emb, ['pickle'])
+            if 'train' in fdata_emb or 'dev' in fdata_emb or 'test' in fdata_emb:
+                frootdata_emb = fdata_emb.replace('_train','').replace('_dev','').replace('_test','')
+                print('prepare %s from %s' % (fdata_emb,frootdata_emb))
+                if not os.path.isfile(join(EMB_DIR,frootdata_emb+'.pickle')):
+                    print('%s not found, prepare...'%(frootdata_emb))
+                    frootdata = fdata.replace('_train', '').replace('_dev', '').replace('_test', '')
+                    X_root = np.load(join(DATA_DIR, frootdata + '.npy'), allow_pickle=True)
+                    rootnumber_array = list(set(np.array(X_root).flat))
+                    if 'random' in frootdata_emb:
+                        d = emb_config['dim']
+                        rootdata_emb = {n: np.random.randn(d) for n in rootnumber_array}
+                        with open(join(EMB_DIR, frootdata_emb + '.pickle'), 'wb') as handle:
+                            pickle.dump(rootdata_emb, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                    else:
+                        rootdata_emb, _ = vocab2vec(rootnumber_array, EMB_DIR, frootdata_emb,
+                                                    join(EMB_DIR, femb + '.txt'), ['pickle'])
+                    print('%s has been prepared'%(frootdata_emb))
                 else:
-                    with open(num_emb_parent_femb + '.pickle', 'rb') as f:
-                        number_emb_parent_dict = pickle.load(f)
-                number_emb_dict = {n:number_emb_parent_dict[n] for n in number_array}
-                print('embedding prepared')
+                    with open(join(EMB_DIR,frootdata_emb + '.pickle'), 'rb') as f:
+                        rootdata_emb = pickle.load(f)
+                data_emb = {n:rootdata_emb[n] for n in number_array}
+                print('%s has been prepared'%(fdata_emb))
             else:
-                if 'random' in emb_fname:
+                # todo: fix following
+                if 'random' in femb:
                     print('generate random embedding...')
                     d = emb_config['dim']
-                    number_emb_dict = {n: np.random.randn(d) for n in number_array}
-                    with open(num_emb_fname+'.pickle', 'wb') as handle:
-                        pickle.dump(number_emb_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                    data_emb = {n: np.random.randn(d) for n in number_array}
+                    with open(fdata_emb+'.pickle', 'wb') as handle:
+                        pickle.dump(data_emb, handle, protocol=pickle.HIGHEST_PROTOCOL)
                     print('embedding saved')
                 else:
-                    number_emb_dict, _ = vocab2vec(number_array, EMB_DIR, num_emb_fname, base_emb, ['pickle'])
+                    data_emb, _ = vocab2vec(number_array, EMB_DIR, fdata_emb, base_emb, ['pickle'])
 
-        number_emb_dict = {k: torch.from_numpy(v).float() for k,v in number_emb_dict.items()}
+        data_emb = {k: torch.from_numpy(v).float() for k,v in data_emb.items()}
 
-        self.number_emb_dict = number_emb_dict
-        self.number_emb_source = emb_fname
+        self.number_emb_dict = data_emb
+        self.number_emb_source = femb
         self.data = X
 
     def __len__(self):
