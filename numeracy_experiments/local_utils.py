@@ -3,13 +3,18 @@ import time
 from math import ceil, sqrt
 from os.path import join
 import numpy as np
+import skopt
 from joblib import Parallel, delayed
 from keras import Sequential
 from keras.layers import Dense, Dropout
 from keras.optimizers import Adam
 from keras.wrappers.scikit_learn import KerasRegressor
+from sklearn.kernel_ridge import KernelRidge
+from sklearn.linear_model import Ridge
 from sklearn.metrics import f1_score, mean_squared_error
-from sklearn.svm import SVC
+from sklearn.svm import SVC, SVR
+from skopt import gp_minimize
+from skopt.space import Categorical, Real, Integer
 from tqdm import tqdm
 from keras import backend as K
 
@@ -65,9 +70,10 @@ def prepare_separation_data(femb):
     print('word embedding: ',X_word.shape)
     return X,y
 
-def prepare_magnitude_data(femb):
+def load_num_emb(femb):
     '''
-    prepare data for regression, X, number embedding, y, number value(represents magnitude)
+    load number embedding from femb
+    embedding in femb should be all number embedding
     :param femb:
     :return:
     '''
@@ -75,24 +81,28 @@ def prepare_magnitude_data(femb):
     number_emb,number_target = [],[]
     print('prepare fitting data...')
     # n_integer = 0
-    with open(join(EMB_DIR, femb), 'r') as f:
-        if 'skipgram' in femb:
-            f.readline()  # skipgram-5.txt
+    with open(join(EMB_DIR, femb+'.txt'), 'r') as f:
         for line in tqdm(f):
             word, *vec = line.rstrip().split(' ')
             vec = np.array(vec, dtype=float)
-            if 'skipgram' in femb:
-                word = word.split('_')[0]  # skipgram-5.txt
-            if is_number(word):
-                if np.isinf(float(word)): continue
-                # if float(word).is_integer(): n_integer += 1
-                number_emb.append(vec)
-                number_target.append(float(word))
+            if np.isinf(float(word)) or np.isnan(float(word)): continue
+            # if float(word).is_integer(): n_integer += 1
+            number_emb.append(vec)
+            number_target.append(float(word))
 
     X = np.stack(number_emb)
     y = np.array(number_target)
     print('number embedding: ',X.shape)
     return X,y
+
+def parallel_predict(X, predict_func, n_cores):
+    n_samples = X.shape[0]
+    slices = [(ceil(n_samples * i / n_cores), ceil(n_samples * (i + 1) / n_cores)) for i in range(n_cores)]
+    start = time.time()
+    y_pred = np.concatenate(Parallel(n_jobs=n_cores)(
+        delayed(predict_func)(X[slices[i_core][0]:slices[i_core][1], :]) for i_core in range(n_cores)))
+    print('predict time: ', time.time() - start)
+    return y_pred
 
 class Minimizer(object):
 
@@ -150,9 +160,10 @@ class MagnitudeAxisMinimizer(Minimizer):
 
 class SeparableExperiments(object):
 
-    def __init__(self,exp_name,save_results):
+    def __init__(self,exp_name,save_results,exp_data):
         self.name = exp_name
         self.save_results = save_results
+        self.exp_data = exp_data
 
     def run(self):
         # space = [Real(1e-6, 1e+6, prior='log-uniform')]
@@ -178,31 +189,94 @@ class SeparableExperiments(object):
         print(self.name,f1)
         return f1
 
-def build_nn(n_hidden_units=64,lr=0.001):
-    model = Sequential()
-    model.add(Dense(n_hidden_units, activation='relu', input_dim=300))
-    model.add(Dropout(0.1))
-    model.add(Dense(1))
-    adam = Adam(learning_rate=lr)
-    model.compile(optimizer=adam,
-                  loss='mse')
-    return model
+class MagnitudeExperiments2(object):
 
-def fit_test_best_model(model,X,y,X_test,y_test,**best_params):
-    model = model(**best_params)
-    if isinstance(model,KerasRegressor):
-        model.fit(X, y, verbose=0)
-    else:
-        model.fit(X,y)
-    y_test_pred = model.predict(X_test)
-    error = sqrt(mean_squared_error(y_test, y_test_pred))
-    return error
+    def __init__(self, exp_name, save_results, exp_data):
+        self.name = exp_name
+        self.save_results = save_results
+        self.exp_data = exp_data
 
-def parallel_predict(X,predict_func,n_cores):
-    n_samples = X.shape[0]
-    slices = [(ceil(n_samples * i / n_cores), ceil(n_samples * (i + 1) / n_cores)) for i in range(n_cores)]
-    start = time.time()
-    y_pred = np.concatenate(Parallel(n_jobs=n_cores)(
-        delayed(predict_func)(X[slices[i_core][0]:slices[i_core][1], :]) for i_core in range(n_cores)))
-    print('predict time: ', time.time() - start)
-    return y_pred
+    def run(self):
+
+        model = self.exp_data['model']
+        base_workspace = self.exp_data['base_workspace']
+
+        if model == 'ridge':
+            space = [Real(1e-3, 1e+3, prior='log-uniform')]
+            optimize_types = ['alpha']
+            minimizer = MagnitudeAxisMinimizer(base_workspace, optimize_types, gp_minimize)
+            minimizer.model = Ridge
+            x0 = [1.0]
+        elif model == 'kernel_ridge':
+            space = [Categorical(['poly', 'rbf', 'sigmoid']),
+                     Real(1e-3, 1e+3, prior='log-uniform'),
+                     Integer(1, 8),
+                     Real(1e-6, 1e+1, prior='log-uniform'),
+                     Real(-10, 10)
+                     ]
+            optimize_types = ['kernel', 'alpha', 'degree', 'gamma', 'coef0']
+            minimizer = MagnitudeAxisMinimizer(base_workspace, optimize_types, gp_minimize)
+            minimizer.model = KernelRidge
+            x0 = ['poly', 1.0, 3, 1 / 300, 0]
+        elif model == 'kernel_ridge_separation':
+            space = [Real(1e-3, 1e+3, prior='log-uniform')]
+            optimize_types = ['alpha']
+            minimizer = MagnitudeAxisMinimizer(base_workspace, optimize_types, gp_minimize)
+            minimizer.model_fixed_params = {'kernel': 'poly', 'degree': 3, 'gamma': 1 / 300, 'coef0': 0}
+            minimizer.model = KernelRidge
+            x0 = [1.0]
+        elif model == 'nn':
+            space = [Integer(16, 256),
+                     Real(1e-5, 1, prior='log-uniform'),
+                     ]
+            optimize_types = ['n_hidden_units', 'lr']
+            minimizer = MagnitudeAxisMinimizer(base_workspace, optimize_types, gp_minimize)
+            minimizer.model_fixed_params = {'build_fn': self.build_nn, 'epochs': 20, 'batch_size': 256}
+            minimizer.model = KerasRegressor
+            x0 = [64, 0.001]
+        elif model == 'kernel_svm':
+            space = [Categorical(['poly', 'rbf', 'sigmoid']),
+                     Real(1e-3, 1e+3, prior='log-uniform'),
+                     Integer(1, 8),
+                     Real(1e-6, 1e+1, prior='log-uniform'),
+                     Real(-10, 10)
+                     ]
+            optimize_types = ['kernel', 'C', 'degree', 'gamma', 'coef0']
+            minimizer = MagnitudeAxisMinimizer(base_workspace, optimize_types, gp_minimize)
+            minimizer.model_fixed_params = {'cache_size': 8000, 'max_iter': 10000}
+            minimizer.model = SVR
+            x0 = ['poly', 1.0, 3, 1 / 300, 0]
+        else:
+            assert False
+
+        res = minimizer.minimize(space, n_calls=50, verbose=True, x0=x0)
+        if self.save_results:
+            skopt.dump(res, self.name+'.pkl', store_objective=False)
+
+        params = {type: v for type, v in zip(minimizer.optimize_types, res.x)}
+        if hasattr(minimizer, 'model_fixed_params'):
+            params = {**params, **minimizer.model_fixed_params}
+        error = self.fit_test_best_model(minimizer.model,
+                                    base_workspace['X'], base_workspace['y'], base_workspace['X_test'],
+                                    base_workspace['y_test'], **params)
+        return error
+
+    def fit_test_best_model(self,model, X, y, X_test, y_test, **best_params):
+        model = model(**best_params)
+        if isinstance(model, KerasRegressor):
+            model.fit(X, y, verbose=0)
+        else:
+            model.fit(X, y)
+        y_test_pred = model.predict(X_test)
+        error = sqrt(mean_squared_error(y_test, y_test_pred))
+        return error
+
+    def build_nn(self,n_hidden_units=64,lr=0.001):
+        model = Sequential()
+        model.add(Dense(n_hidden_units, activation='relu', input_dim=300))
+        model.add(Dropout(0.1))
+        model.add(Dense(1))
+        adam = Adam(learning_rate=lr)
+        model.compile(optimizer=adam,
+                      loss='mse')
+        return model
