@@ -1,7 +1,7 @@
 import io
 import pickle
 from collections import defaultdict
-from os.path import join
+from os.path import join, splitext
 
 import numpy as np
 
@@ -105,7 +105,7 @@ def vocab2vec(vocab, output_dir, output_name, word_emb, savefmt, type='glove', n
 
 def is_number(s):
     try:
-        return True if not np.isnan(float(s)) else False
+        return True if not np.isnan(float(s)) and not np.isinf(float(s)) else False
     except ValueError:
         return False
 
@@ -129,18 +129,20 @@ def preprocess_google_news_skip(emb_fname):
                 str_vec = ' '.join(str(n) for n in word_dictionary[word])
                 f.write(word+' '+str_vec+'\n')
 
-def preprocess_skipgram2(emb_fname):
+def extract_num_emb(emb_fname):
     """
-    preprocess skipgram-2/skipgram-5 and two fasttext emb file
+    extract num embedding from skipgram/fasttext/glove embedding and save
     :param emb_fname:
     :return:
     """
-    fin = io.open(emb_fname+'.vec', 'r', encoding='utf-8', newline='\n', errors='ignore')
-    fin.readline()
-    with open(emb_fname + '_num' + '.txt', 'w') as f:
-        for line in fin:
+    fin = io.open(emb_fname, 'r', encoding='utf-8', newline='\n', errors='ignore')
+    if 'skipgram' in emb_fname or 'subword' in emb_fname:
+        fin.readline()
+    with open(splitext(emb_fname)[0] + '_num' + '.txt', 'w') as f:
+        for line in tqdm(fin):
             word,*vec = line.rstrip().split(' ')
-            word = word.split('_')[0]
+            if 'skipgram' in emb_fname:
+                word = word.split('_')[0]
             if is_number(word):
                 str_vec = ' '.join(vec)
                 f.write(word + ' ' + str_vec + '\n')
