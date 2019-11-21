@@ -3,13 +3,13 @@ import time
 from math import ceil, sqrt
 from os.path import join
 import numpy as np
-import torch
 from joblib import Parallel, delayed
 from keras import Sequential
 from keras.layers import Dense, Dropout
 from keras.optimizers import Adam
 from keras.wrappers.scikit_learn import KerasRegressor
 from sklearn.metrics import f1_score, mean_squared_error
+from sklearn.svm import SVC
 from tqdm import tqdm
 from keras import backend as K
 
@@ -42,13 +42,13 @@ def prepare_separation_data(femb):
     number_emb, word_emb = [], []
     print('prepare fitting data...')
     with open(join(EMB_DIR, femb), 'r') as f:
-        if 'skipgram' in femb:
-            f.readline()  # skipgram-5.txt
+        if 'skipgram' in femb or 'subword' in femb:
+            f.readline()  # skipgram or fasttext
         for line in tqdm(f):
             word, *vec = line.rstrip().split(' ')
             vec = np.array(vec, dtype=float)
             if 'skipgram' in femb:
-                word = word.split('_')[0]  # skipgram-5.txt
+                word = word.split('_')[0]  # skipgram
             if is_number(word):
                 number_emb.append(vec)
             else:
@@ -111,8 +111,10 @@ class Minimizer(object):
         y = workspace['fitting_y']
 
         model.set_params(**optimize_workspace)
+        start = time.time()
         model.fit(X, y)
-        y_pred = model.predict(X)
+        print('fit time: ',time.time()-start)
+        y_pred = parallel_predict(X, model.predict, 10)
         return -f1_score(y, y_pred)
 
     def minimize(self,space,**min_args):
@@ -145,6 +147,36 @@ class MagnitudeAxisMinimizer(Minimizer):
         except np.linalg.LinAlgError:
             error = 1e+30
         return error
+
+class SeparableExperiments(object):
+
+    def __init__(self,exp_name,save_results):
+        self.name = exp_name
+        self.save_results = save_results
+
+    def run(self):
+        # space = [Real(1e-6, 1e+6, prior='log-uniform')]
+        # optimize_types = ['C']
+        # x0=[1.0]
+        # model = SVC(kernel='poly',degree=3,gamma=1/(300*exp_data['X'].var()),coef0=0,
+        #   cache_size=8000,class_weight='balanced',verbose=True,max_iter=15000)
+        # fitting_X = exp_data['X']
+        # fitting_y = exp_data['y']
+        # base_workspace = {'model':model,'fitting_X':fitting_X,'fitting_y':fitting_y}
+        # minimizer = Minimizer(base_workspace,optimize_types,gp_minimize)
+        # res_gp = minimizer.mini_func(space,n_calls=11,verbose=True,x0=x0,n_jobs=-1)
+        # if self.save_results:
+        #     skopt.dump(res_gp,self.name+'.pkl',store_objective=False)
+        # return -res_gp.fun
+        svc = SVC(kernel='poly', degree=3, gamma=1 / 300, coef0=0, C=1,
+                  cache_size=3000, class_weight='balanced', verbose=True, max_iter=20000)
+        start = time.time()
+        svc.fit(self.exp_data['X'], self.exp_data['y'])
+        print('fit time: ', time.time() - start)
+        y_pred = parallel_predict(self.exp_data['X'], svc.predict, 10)
+        f1 = f1_score(self.exp_data['y'], y_pred)
+        print(self.name,f1)
+        return f1
 
 def build_nn(n_hidden_units=64,lr=0.001):
     model = Sequential()
