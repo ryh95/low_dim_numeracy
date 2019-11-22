@@ -184,7 +184,7 @@ def train_dev_test_split(data,ratios,fdata):
     :param ratios: list, ratio, sum up to 1
     :return:
     """
-    random.shuffle(data)
+    np.random.shuffle(data)
     begin,end = ratios[0],ratios[0]+ratios[1]
     begin = int(begin*len(data))
     end = int(end*len(data))

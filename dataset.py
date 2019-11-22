@@ -29,12 +29,13 @@ class BaseDataset(Dataset):
         #     X = pickle.load(f)
 
         femb = emb_config['emb_fname'] # embedding file name used to create number embedding
-        if femb == 'random':
-            # fdata_emb = join(EMB_DIR, fdata + '_' + femb + '_emb')
-            fdata_emb = fdata + '_' + femb + '_emb'
-        else:
-            # fdata_emb = join(EMB_DIR, fdata + '_emb')
-            fdata_emb = fdata + '_emb'
+        fdata_emb = fdata + '_' + femb
+        # if femb == 'random':
+        #     # fdata_emb = join(EMB_DIR, fdata + '_' + femb + '_emb')
+        #     fdata_emb = fdata + '_' + femb + '_emb'
+        # else:
+        #     # fdata_emb = join(EMB_DIR, fdata + '_emb')
+        #     fdata_emb = fdata + '_emb'
 
         if isfile(join(EMB_DIR,fdata_emb + '.pickle')):
             with open(join(EMB_DIR,fdata_emb + '.pickle'), 'rb') as f:

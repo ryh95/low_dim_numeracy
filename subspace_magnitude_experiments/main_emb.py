@@ -4,6 +4,7 @@ from os.path import join, isfile
 
 import skopt
 import torch
+from sklearn.preprocessing import StandardScaler
 from skopt import gp_minimize
 from skopt.callbacks import CheckpointSaver
 from skopt.space import Integer, Real, Categorical
@@ -11,10 +12,10 @@ from skopt.utils import dump
 from torch.utils.data import ConcatDataset, DataLoader
 import torch.nn.functional as F
 import numpy as np
-from config import DATA_DIR
+from config import DATA_DIR, EMB_DIR
 from model import OVA_Subspace_Model, SC_Subspace_Model
 from subspace_magnitude_experiments.local_utils import load_dataset, Minimizer, init_evaluate, train_dev_test_split
-from utils import cosine_distance
+from utils import cosine_distance, vocab2vec
 
 experiments = 'sc'
 if experiments == 'ova':
@@ -23,20 +24,51 @@ elif experiments == 'sc':
     model = SC_Subspace_Model
 else:
     assert False
-num_sources = ['skipgram-5']
+# num_sources = ['skipgram-5']
+num_sources = ['ori']
 fsrc_datas = {}
+# fembs = ['glove.6B.300d_num']
+fembs = ['random']
 for src in num_sources:
-    f_train_dev_test = [src + '_' + experiments + '_' + name for name in ['train','dev','test']]
-    if not isfile(join(DATA_DIR,f_train_dev_test[0]+'.npy')):
+    fdatas = [src + '_' + experiments + '_' + type for type in ['train', 'dev', 'test']]
+    # if no training data, train dev test split
+    if not isfile(join(DATA_DIR, fdatas[0] + '.npy')):
         print('prepare train dev and test')
-        X = np.load(join(DATA_DIR, src + '_' + experiments + '.npy'),allow_pickle=True)
-        train_dev_test_split(X,[0.65,0.15,0.2],src + '_' + experiments)
-    fsrc_datas[src] = f_train_dev_test
+        X_root = np.load(join(DATA_DIR, src + '_' + experiments + '.npy'), allow_pickle=True)
+        train_dev_test_split(X_root, [0.65, 0.15, 0.2], src + '_' + experiments)
+    for femb in fembs:
+        if femb == 'random': continue
+        fdata_embs = [fdata+'_'+femb for fdata in fdatas]
+
+        # if no embedding of training data, prepare and standardize
+        if not isfile(join(EMB_DIR, fdata_embs[0] + '.pickle')):
+            # prepare train/dev/test embedding
+            embs = []
+            nums = []
+            for fdata,fdata_emb in zip(fdatas,fdata_embs):
+                X = np.load(join(DATA_DIR,fdata + '.npy'),allow_pickle=True)
+                X_num = list(set(np.array(X).flat))
+                nums.append(X_num)
+                _,vocab_vec = vocab2vec(X_num, output_dir=EMB_DIR, output_name=fdata_emb,
+                                        word_emb=join(EMB_DIR, femb + '.txt'), savefmt=['None'])
+                embs.append(vocab_vec)
+            emb_train,emb_dev,emb_test = embs
+            # standardize the embedding
+            scaler = StandardScaler()
+            emb_train = scaler.fit_transform(emb_train.T)
+            emb_dev = scaler.transform(emb_dev.T)
+            emb_test = scaler.transform(emb_test.T)
+            embs = [emb_train,emb_dev,emb_test]
+            for i in range(3):
+                with open(join(EMB_DIR, fdata_embs[i] + '.pickle'), 'wb') as handle:
+                    pickle.dump({num:embs[i][j,:] for j,num in enumerate(nums[i])}, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    fsrc_datas[src] = fdatas
 
 base_workspace = {
     'train_verbose':False,
     'n_epochs':50,
-    'mini_batch_size':256,
+    'mini_batch_size':512,
     'emb_dim':300,
     'model':model,
     'save_model': False,
@@ -94,15 +126,14 @@ minimizer = Minimizer(base_workspace, optimize_types, mini_func)
 #     print('train acc: %f'%(eval_accs['train']))
 #     # print('val acc: %f'%(eval_accs['val']))
 
-fembs = ['random']
-for src in num_sources:
-    for femb in fembs:
-        emb_conf = {}
-        if 'random' in femb:
-            emb_conf['dim'] = 300
-        emb_conf['emb_fname'] = femb
-        test_dataset = load_dataset(fsrc_datas[src][-1], emb_conf, pre_load=False)
-        print('test acc in original space of %s: %.4f'%(femb,init_evaluate(test_dataset,cosine_distance)))
+# for src in num_sources:
+#     for femb in fembs:
+#         emb_conf = {}
+#         if 'random' in femb:
+#             emb_conf['dim'] = 300
+#         emb_conf['emb_fname'] = femb
+#         test_dataset = load_dataset(fsrc_datas[src][-1], emb_conf, pre_load=False)
+#         print('test acc in original space of %s: %.4f'%(femb,init_evaluate(test_dataset,cosine_distance)))
 
 for src in num_sources:
     for femb in fembs:
@@ -123,7 +154,7 @@ for src in num_sources:
                  Real(10 ** -5, 10 ** 0, "log-uniform"),
                  ]
 
-        checkpoint_fname = femb + '_checkpoint.pkl'
+        checkpoint_fname = '_'.join([src, experiments, femb, 'checkpoint.pkl'])
         checkpoint_callback = CheckpointSaver(checkpoint_fname, store_objective=False)
 
         # load checkpoint if there exists checkpoint, otherwise from scratch
@@ -136,7 +167,7 @@ for src in num_sources:
             x0 = [64,6,0.005]
             res = minimizer.minimize(space, x0=x0, n_calls=50, callback=[checkpoint_callback], verbose=True)
 
-        results_fname = '_'.join(['results', femb])
+        results_fname = '_'.join(['results', src, experiments, femb])
         dump(res, results_fname+'.pkl',store_objective=False)
 
         # train on the train and dev sets and then test on test sets
