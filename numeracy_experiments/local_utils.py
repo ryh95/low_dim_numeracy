@@ -47,13 +47,11 @@ def prepare_separation_data(femb):
     number_emb, word_emb = [], []
     print('prepare fitting data...')
     with open(join(EMB_DIR, femb), 'r') as f:
-        if 'skipgram' in femb or 'subword' in femb:
-            f.readline()  # skipgram or fasttext
+        f.readline()  # skipgram or fasttext
         for line in tqdm(f):
             word, *vec = line.rstrip().split(' ')
             vec = np.array(vec, dtype=float)
-            if 'skipgram' in femb:
-                word = word.split('_')[0]  # skipgram
+            word = word.split('_')[0]  # skipgram
             if is_number(word):
                 number_emb.append(vec)
             else:
@@ -70,7 +68,7 @@ def prepare_separation_data(femb):
     print('word embedding: ',X_word.shape)
     return X,y
 
-def load_num_emb(femb):
+def load_num_emb(femb, sel_nums_train, sel_nums_val, sel_nums_test):
     '''
     load number embedding from femb
     embedding in femb should be all number embedding
@@ -78,22 +76,39 @@ def load_num_emb(femb):
     :return:
     '''
     # todo: possible duplicate with utils/preprocess_google_news_skip
-    number_emb,number_target = [],[]
-    print('prepare fitting data...')
-    # n_integer = 0
+    number_emb_train,number_target_train = [],[]
+    number_emb_val, number_target_val = [], []
+    number_emb_test, number_target_test = [], []
+    print('prepare data...')
+    sel_nums_train_set = set(sel_nums_train)
+    sel_nums_val_set = set(sel_nums_val)
+    sel_nums_test_set = set(sel_nums_test)
     with open(join(EMB_DIR, femb+'.txt'), 'r') as f:
+        f.readline()
         for line in tqdm(f):
             word, *vec = line.rstrip().split(' ')
             vec = np.array(vec, dtype=float)
-            if np.isinf(float(word)) or np.isnan(float(word)): continue
-            # if float(word).is_integer(): n_integer += 1
-            number_emb.append(vec)
-            number_target.append(float(word))
+            word = word.split('_')[0]
+            if word in sel_nums_train_set:
+                number_emb_train.append(vec)
+                number_target_train.append(float(word))
+                sel_nums_train_set.remove(word)
+            elif word in sel_nums_val_set:
+                number_emb_val.append(vec)
+                number_target_val.append(float(word))
+                sel_nums_val_set.remove(word)
+            elif word in sel_nums_test_set:
+                number_emb_test.append(vec)
+                number_target_test.append(float(word))
+                sel_nums_test_set.remove(word)
 
-    X = np.stack(number_emb)
-    y = np.array(number_target)
-    print('number embedding: ',X.shape)
-    return X,y
+    X_train = np.stack(number_emb_train)
+    y_train = np.array(number_target_train)
+    X_val = np.stack(number_emb_val)
+    y_val = np.array(number_target_val)
+    X_test = np.stack(number_emb_test)
+    y_test = np.array(number_target_test)
+    return X_train,y_train,X_val,y_val,X_test,y_test
 
 def parallel_predict(X, predict_func, n_cores):
     n_samples = X.shape[0]
@@ -180,7 +195,7 @@ class SeparableExperiments(object):
         #     skopt.dump(res_gp,self.name+'.pkl',store_objective=False)
         # return -res_gp.fun
         svc = SVC(kernel='poly', degree=3, gamma=1 / 300, coef0=0, C=1,
-                  cache_size=3000, class_weight='balanced', verbose=True, max_iter=20000)
+                  cache_size=3000, class_weight='balanced', verbose=True, max_iter=30000)
         start = time.time()
         svc.fit(self.exp_data['X'], self.exp_data['y'])
         print('fit time: ', time.time() - start)
@@ -249,7 +264,7 @@ class MagnitudeExperiments2(object):
         else:
             assert False
 
-        res = minimizer.minimize(space, n_calls=50, verbose=True, x0=x0)
+        res = minimizer.minimize(space, n_calls=40, verbose=True, x0=x0)
         if self.save_results:
             skopt.dump(res, self.name+'.pkl', store_objective=False)
 
