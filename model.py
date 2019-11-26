@@ -5,46 +5,27 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+class NeuralNetworkMapping(nn.Module):
 
-class Subspace_Model(nn.Module):
+    def __init__(self,nh1,nout):
+        super(NeuralNetworkMapping, self).__init__()
+        self.linear = nn.Linear(300,nh1)
+        self.activation = nn.Tanh()
+        self.out = nn.Linear(nh1,nout)
+        self.out_activation = nn.Tanh()
 
-    def __init__(self,dim,d,beta,distance_metric):
-        super(Subspace_Model,self).__init__()
-        self.beta = beta
+    def forward(self, x):
+        return self.out_activation(self.out(self.activation(self.linear(x))))
+
+class SubspaceMapping(nn.Module):
+
+    def __init__(self,dim,d):
+        super(SubspaceMapping,self).__init__()
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.W = nn.Parameter(torch.randn((dim, d),device=self.device))
         # self.W = torch.randn((dim, d), requires_grad=True,device=self.device)
         torch.nn.init.orthogonal_(self.W)
         self.W.data = self.W.T.data  # col orthognol
-        if distance_metric == 'euclidean':
-            self.distance = F.pairwise_distance
-        elif distance_metric == 'cosine':
-            self.distance = lambda x,y: 1 - F.cosine_similarity(x,y)
-
-
-    def soft_indicator(self,x):
-        """
-        f(x) = (1+e^(-beta*x))^(-1)
-        :param x:
-        :param beta: the larger the beta,
-        :return:
-        """
-
-        # important: the element order of z is not the same with that in x
-        y_pos = torch.exp(-self.beta * x[x >= 0])
-        z_pos = (1 + y_pos) ** (-1)
-        y_neg = torch.exp(self.beta * x[x < 0])
-        z_neg = 1 - (1 + y_neg) ** (-1)
-
-        return torch.cat((z_pos, z_neg))
-
-    def criterion(self,dp,dm):
-
-        objs = self.soft_indicator(dm - dp)
-        loss = -torch.mean(objs)
-        acc = torch.mean((dp < dm).float())  # mini-batch acc, batch size is same as dp/dm
-
-        return loss,acc
 
     def project(self):
         # project the variables back to the feasible set
@@ -68,6 +49,50 @@ class Subspace_Model(nn.Module):
             torch.save(self.W.grad,'runtime_error_W_grad.pt')
             exit()
 
+    def forward(self, x):
+        # Bxd / B x n-2 x d
+        # return shape Bxs / B x n-2 x s
+        return x @ self.W
+
+class Model(nn.Module):
+
+    def __init__(self,mapping_model,distance_metric,beta):
+        super(Model,self).__init__()
+        self.mapping = mapping_model
+        self.beta = beta
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        if distance_metric == 'euclidean':
+            self.distance = F.pairwise_distance
+        elif distance_metric == 'cosine':
+            self.distance = lambda x,y: 1 - F.cosine_similarity(x,y)
+
+    def soft_indicator(self,x):
+        """
+        f(x) = (1+e^(-beta*x))^(-1)
+        :param x:
+        :param beta: the larger the beta,
+        :return:
+        """
+
+        # important: the element order of z is not the same with that in x
+        # y_pos = torch.exp(-self.beta * x[x >= 0])
+        # z_pos = (1 + y_pos) ** (-1)
+        # y_neg = torch.exp(self.beta * x[x < 0])
+        # z_neg = 1 - (1 + y_neg) ** (-1)
+
+        y = 1 / (1+torch.exp(-self.beta*x))
+        return y
+        # return torch.cat((z_pos, z_neg))
+
+    def criterion(self,dp,dm):
+
+        objs = self.soft_indicator(dm - dp)
+        loss = -torch.mean(objs)
+        acc = torch.mean((dp.data < dm.data).float())  # mini-batch acc, batch size is same as dp/dm
+
+        return loss,acc
+
+
     def evaluate(self,data_batches):
         """
         evaluate W on data_batches, i.e., all data in data batches
@@ -77,6 +102,9 @@ class Subspace_Model(nn.Module):
         losses, accs = [],[]
         # start = time.time()
         # num_mini_batches = 0
+
+        # print(self.mapping.W)
+
         for mini_batch in data_batches:
             mini_P_x, mini_P_xp, mini_P_xms = mini_batch
 
@@ -87,7 +115,9 @@ class Subspace_Model(nn.Module):
             dp, dm = self.forward(mini_P_x, mini_P_xp, mini_P_xms)
             objs = self.soft_indicator(dm.data - dp.data)
             loss = -torch.sum(objs)
-            acc = torch.sum((dp < dm).float())
+            acc = torch.sum((dp.data < dm.data).float())
+
+            print(acc)
 
             losses.append(loss)
             accs.append(acc)
@@ -98,20 +128,24 @@ class Subspace_Model(nn.Module):
         acc = torch.sum(torch.stack(accs))/len(data_batches.dataset)
         return acc.item(),loss.item()
 
-
-class OVA_Subspace_Model(Subspace_Model):
+class OVAModel(Model):
 
     def forward(self,mini_P_x, mini_P_xp, mini_P_xms):
-        dp = self.distance(torch.matmul(mini_P_x,self.W),torch.matmul(mini_P_xp,self.W))
-        dm = torch.min(self.distance(torch.matmul(self.W.T,mini_P_xp[:,:,None]),torch.matmul(self.W.T,mini_P_xms)),dim=1)[0]
+        map_min_P_x = self.mapping(mini_P_x)
+        map_min_P_xp = self.mapping(mini_P_xp)
+        map_min_P_xms = self.mapping(mini_P_xms)
+        dp = self.distance(map_min_P_x,map_min_P_xp)
+        dm = torch.min(self.distance(map_min_P_x[:,:,None],map_min_P_xms.transpose(1,2)),dim=1)[0]
 
         return dp,dm
 
+class SCModel(Model):
 
-class SC_Subspace_Model(Subspace_Model):
+    def forward(self, mini_P_x, mini_P_xp, mini_P_xm):
+        map_min_P_x = self.mapping(mini_P_x)
+        map_min_P_xp = self.mapping(mini_P_xp)
+        map_min_P_xm = self.mapping(mini_P_xm)
+        dp = self.distance(map_min_P_x, map_min_P_xp)
+        dm = self.distance(map_min_P_x, map_min_P_xm)
 
-    def forward(self,mini_P_x, mini_P_xp, mini_P_xm):
-        dp = self.distance(torch.matmul(mini_P_x,self.W),torch.matmul(mini_P_xp,self.W))
-        dm = self.distance(torch.matmul(mini_P_x,self.W),torch.matmul(mini_P_xm,self.W))
-
-        return dp,dm
+        return dp, dm

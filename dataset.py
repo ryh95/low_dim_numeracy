@@ -99,9 +99,9 @@ class OVADataset(BaseDataset):
         test_sample = self.data[idx]
         n_ova = len(test_sample)
         d = next(iter(self.number_emb_dict.values())).numel()
-        P_xms = torch.zeros(d, n_ova, dtype=torch.float32)
+        P_xms = torch.zeros(n_ova, d, dtype=torch.float32)
         for i,(x,xp,xm) in enumerate(test_sample):
-            P_xms[:,i] = self.number_emb_dict[xm]
+            P_xms[i,:] = self.number_emb_dict[xm]
 
         P_x = self.number_emb_dict[test_sample[0][0]]
         P_xp = self.number_emb_dict[test_sample[0][1]]

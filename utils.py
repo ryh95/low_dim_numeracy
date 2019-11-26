@@ -29,6 +29,8 @@ def vocab2vec(vocab, output_dir, output_name, word_emb, savefmt, type='glove', n
 
     if type == 'glove':
         with open(word_emb, 'r') as f:
+            # todo: remove this if the embedding doesn't have header
+            # f.readline() # skip header
             _, *vec = next(f).rstrip().split(' ')
             vec_dim = len(vec)
     elif type == 'word2vec':
@@ -44,9 +46,11 @@ def vocab2vec(vocab, output_dir, output_name, word_emb, savefmt, type='glove', n
     if type == 'glove':
         mean_emb_vec = np.zeros(vec_dim)
         with open(word_emb, 'r') as f:
+            # f.readline() # skip header
             i = 0
             for line in tqdm(f):
                 word, *vec = line.rstrip().split(' ')
+                # word = word.split('_')[0] # handle the word2vec-wiki
                 vec = np.array(vec, dtype=float)
                 mean_emb_vec += vec
 
@@ -157,9 +161,8 @@ def obtain_OVA_from_SC(sc_tests,fname):
     number_set = set(np.array(sc_tests).flat)
     number_array = sorted(number_set, key=lambda x: float(x))
     max_num = number_array[-1]
-    ch_len = len(max(number_set, key=lambda x: len(x)))
     l_number_array = len(number_array)
-    ova_tests = np.chararray((l_number_array,l_number_array-2,3),itemsize=ch_len)
+    ova_tests = np.empty((l_number_array,l_number_array-2,3),dtype=np.object)
     valid_id = np.ones(l_number_array)
     for i, n in tqdm(enumerate(number_array)):
 
@@ -233,7 +236,7 @@ def obtain_OVA_from_SC(sc_tests,fname):
 
     print('number of ova tests: %d' %(len(ova_tests)))
 
-    np.save(fname+'_ovamag_str',ova_tests)
+    np.save(fname+'_ova',ova_tests)
     # with open('ovamag_str.pkl', 'wb') as f:
     #     pickle.dump(ova_tests, f, pickle.HIGHEST_PROTOCOL)
 
@@ -270,6 +273,4 @@ class KernelDistance(object):
         return 1 - k_xy / ((k_xx ** 0.5) * (k_yy ** 0.5))
 
 def cosine_distance(x,y):
-    if len(y.size()) == 3:
-        x = x[:,:,None]
     return 1 - F.cosine_similarity(x, y)

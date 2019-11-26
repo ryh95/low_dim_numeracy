@@ -24,7 +24,12 @@ with open(join(EMB_DIR,femb+'.txt'),'r') as f:
 # e.g. ['-3', '-3.0', '-03']
 rem_numbers = [v[0] for k,v in numbers.items()]
 
+# filter numbers due to skewed magnitude distribution
+rem_numbers = [num for num in rem_numbers if float(num)>0 and float(num)<10000]
+
 # sort numbers
+# femb = 'inter_nums'
+# rem_numbers = np.load(join(VOCAB_DIR,'inter_nums.npy'))
 s_numbers = sorted(rem_numbers,key=lambda x: float(x))
 
 # prepare (x,x_+,x_-) triples(sc)
@@ -159,7 +164,7 @@ valid_id = valid_id.astype(bool)
 x_triples = x_triples[valid_id,:]
 
 print('number of sc tests: %d' %(len(x_triples)))
-np.save(femb[:-4]+'_sc',x_triples) # remove '_num' suffix
+np.save(femb+'_sc',x_triples)
 
 # prepare ova according to sc
 obtain_OVA_from_SC(x_triples,femb)
