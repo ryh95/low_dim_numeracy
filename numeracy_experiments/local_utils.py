@@ -194,8 +194,19 @@ class SeparableExperiments(object):
         # if self.save_results:
         #     skopt.dump(res_gp,self.name+'.pkl',store_objective=False)
         # return -res_gp.fun
+
+        # word2vec-wiki iter: 20000/ word2vec-giga iter: 20000
+        # glove-wiki iter: 20000/ glove-giga iter: 30000
+        # fasttext-wiki iter: 30000/ fasttext-giga iter: 30000
+
+        # cache size: 4000
+        iteration = 30000
+        name = self.name.split('_')[0]
+        if name == 'glove-wiki' or name == 'word2vec-wiki' or name == 'word2vec-giga':
+            iteration = 20000
+
         svc = SVC(kernel='poly', degree=3, gamma=1 / 300, coef0=0, C=1,
-                  cache_size=3000, class_weight='balanced', verbose=True, max_iter=30000)
+                  cache_size=4000, class_weight='balanced', verbose=True, max_iter=iteration)
         start = time.time()
         svc.fit(self.exp_data['X'], self.exp_data['y'])
         print('fit time: ', time.time() - start)
