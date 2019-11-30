@@ -8,28 +8,28 @@ import numpy as np
 
 from tqdm import tqdm
 
-from config import EMB, EMB_DIR
+from config import EMB, EMB_DIR, VOCAB_DIR
 from utils import is_number, is_valid_triple, obtain_OVA_from_SC
 
-femb = 'skipgram-5_num'
-# collect numbers from word embedding
-numbers = defaultdict(list)
-with open(join(EMB_DIR,femb+'.txt'),'r') as f:
-    for line in tqdm(f):
-        word, *vec = line.rstrip().split(' ')
-        if is_number(word):
-           numbers[float(word)].append(word)
-
-# remove redudent numbers
-# e.g. ['-3', '-3.0', '-03']
-rem_numbers = [v[0] for k,v in numbers.items()]
-
-# filter numbers due to skewed magnitude distribution
-rem_numbers = [num for num in rem_numbers if float(num)>0 and float(num)<10000]
+# femb = 'skipgram-5_num'
+# # collect numbers from word embedding
+# numbers = defaultdict(list)
+# with open(join(EMB_DIR,femb+'.txt'),'r') as f:
+#     for line in tqdm(f):
+#         word, *vec = line.rstrip().split(' ')
+#         if is_number(word):
+#            numbers[float(word)].append(word)
+#
+# # remove redudent numbers
+# # e.g. ['-3', '-3.0', '-03']
+# rem_numbers = [v[0] for k,v in numbers.items()]
+#
+# # filter numbers due to skewed magnitude distribution
+# rem_numbers = [num for num in rem_numbers if float(num)>0 and float(num)<10000]
 
 # sort numbers
-# femb = 'inter_nums'
-# rem_numbers = np.load(join(VOCAB_DIR,'inter_nums.npy'))
+femb = 'sel_orig_nums'
+rem_numbers = np.load(join(VOCAB_DIR,'sel_orig_nums.npy'))
 s_numbers = sorted(rem_numbers,key=lambda x: float(x))
 
 # prepare (x,x_+,x_-) triples(sc)

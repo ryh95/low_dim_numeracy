@@ -23,6 +23,7 @@ class Minimizer(object):
     def __init__(self, base_workspace, optimize_types, mini_func):
         self.base_workspace = base_workspace
         self.model = base_workspace['model']
+        self.loss = base_workspace['loss']
         self.optimizer = base_workspace['optimizer']
         self.mini_func = mini_func
         self.optimize_types = optimize_types
@@ -36,11 +37,11 @@ class Minimizer(object):
 
         best_acc = -inf
 
-        mini_batchs = DataLoader(workspace['train_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=6, pin_memory=True)
+        mini_batchs = DataLoader(workspace['train_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=0, pin_memory=True)
         if 'val_data' in workspace:
-            mini_batchs_val = DataLoader(workspace['val_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=4, pin_memory=True)
+            mini_batchs_val = DataLoader(workspace['val_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=0, pin_memory=True)
         if 'test_data' in workspace:
-            mini_batchs_test = DataLoader(workspace['test_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=4, pin_memory=True)
+            mini_batchs_test = DataLoader(workspace['test_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=0, pin_memory=True)
 
         if workspace['mapping_type'] == 'subspace':
             mapping_model = SubspaceMapping(workspace['subspace_dim'], workspace['emb_dim'])
@@ -51,7 +52,18 @@ class Minimizer(object):
         else:
             assert False
 
-        model = self.model(mapping_model,workspace['distance_metric'],workspace['beta'])
+        if 'loss_params' in workspace:
+            loss = self.loss(**workspace['loss_params'])
+        else:
+            loss = self.loss()
+
+        model = self.model(mapping_model,workspace['distance_metric'],loss)
+
+        if 'val_data' in workspace:
+            # init evaluate
+            print('evaluate on val data')
+            evaluate_acc, _ = model.evaluate(mini_batchs_val)
+            print(evaluate_acc)
 
         # acc, loss = ova_model.evaluate(mini_batchs)
         # print('init specialized acc: ', acc)
@@ -99,7 +111,7 @@ class Minimizer(object):
 
                 if isinstance(mapping_model,SubspaceMapping):
                     model.mapping.project()
-                    print(model.mapping.W)
+                    # print(model.mapping.W)
 
             if workspace['train_verbose']:
                 print("train: ", time.time() - start)
@@ -108,13 +120,18 @@ class Minimizer(object):
         if workspace['select_inter_model']:
             model.W = torch.nn.Parameter(best_W)
         if workspace['save_model']:
+            if 'loss_params' in workspace:
+                loss_str = '_'.join([str(k) + '_' + str(v) for k, v in workspace['loss_params'].items()])
+            else:
+                loss_str = ''
+
             if workspace['mapping_type'] == 'nn':
                 fname = '_'.join([str(i) for i in [workspace['n_hidden1'], workspace['n_out'],
-                                                   workspace['emb_dim'], workspace['beta'],
+                                                   workspace['emb_dim'], loss_str,
                                                    workspace['distance_metric'], f"{workspace['lr']:.4f}",
                                                    workspace['n_epochs']]]) + '.pt'
             elif workspace['mapping_type'] == 'subspace':
-                fname = '_'.join([str(i) for i in [workspace['subspace_dim'], workspace['emb_dim'], workspace['beta'],
+                fname = '_'.join([str(i) for i in [workspace['subspace_dim'], workspace['emb_dim'], loss_str,
                                                    workspace['distance_metric'], f"{workspace['lr']:.4f}",
                                                    workspace['n_epochs']]]) + '.pt'
             else:
@@ -159,7 +176,7 @@ class Minimizer(object):
 #         dump(res, self.checkpoint_path, **self.dump_options)
 
 def load_dataset(fdata,emb_conf,pre_load=True):
-    if 'ova' in fdata:
+    if 'ova' in fdata or 'sc_k' in fdata:
         data = OVADataset(fdata,emb_conf)
     elif 'sc' in fdata:
         data = SCDataset(fdata,emb_conf)
@@ -167,7 +184,7 @@ def load_dataset(fdata,emb_conf,pre_load=True):
         assert False
     if pre_load:
         # preload all train_data into memory to save time
-        mini_batchs = DataLoader(data, batch_size=128, num_workers=8)
+        mini_batchs = DataLoader(data, batch_size=128, num_workers=6)
         P_x, P_xp, P_xms = [], [], []
         for i, mini_batch in enumerate(mini_batchs):
             mini_P_x, mini_P_xp, mini_P_xms = mini_batch
@@ -183,7 +200,7 @@ def load_dataset(fdata,emb_conf,pre_load=True):
 
 def init_evaluate(dataset,distance_metric):
     losses, accs = [], []
-    data_batches = DataLoader(dataset, batch_size=128,num_workers=4,pin_memory=True)
+    data_batches = DataLoader(dataset, batch_size=128,num_workers=0,pin_memory=True)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     for mini_batch in data_batches:
         mini_P_x, mini_P_xp, mini_P_xms = mini_batch

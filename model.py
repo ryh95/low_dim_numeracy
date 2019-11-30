@@ -4,6 +4,8 @@ import scipy.linalg as scipy_linalg
 import torch
 from torch import nn
 import torch.nn.functional as F
+from torch.nn.modules.loss import _Loss
+
 
 class NeuralNetworkMapping(nn.Module):
 
@@ -16,6 +18,7 @@ class NeuralNetworkMapping(nn.Module):
 
     def forward(self, x):
         return self.out_activation(self.out(self.activation(self.linear(x))))
+        # return self.activation(self.linear(x))
 
 class SubspaceMapping(nn.Module):
 
@@ -54,40 +57,44 @@ class SubspaceMapping(nn.Module):
         # return shape Bxs / B x n-2 x s
         return x @ self.W
 
+class PowerHingeLoss(_Loss):
+
+    def forward(self, x):
+        return torch.max(torch.zeros_like(x), 1 + x) ** 6
+
+class LogisticLoss(_Loss):
+
+    def __init__(self,beta):
+        super(LogisticLoss,self).__init__()
+        self.beta = beta
+
+    def forward(self, x):
+        # important: the element order of z is not the same with that in x
+        y_pos = torch.exp(-self.beta * x[x >= 0])
+        z_pos = (1 + y_pos) ** (-1)
+        y_neg = torch.exp(self.beta * x[x < 0])
+        z_neg = 1 - (1 + y_neg) ** (-1)
+
+        # y = 1 / (1+torch.exp(-self.beta*x))
+        # return y
+        return torch.cat((z_pos, z_neg))
+
 class Model(nn.Module):
 
-    def __init__(self,mapping_model,distance_metric,beta):
+    def __init__(self, mapping_model, distance_type, loss):
         super(Model,self).__init__()
         self.mapping = mapping_model
-        self.beta = beta
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        if distance_metric == 'euclidean':
+        self.loss = loss
+        if distance_type == 'euclidean':
             self.distance = F.pairwise_distance
-        elif distance_metric == 'cosine':
+        elif distance_type == 'cosine':
             self.distance = lambda x,y: 1 - F.cosine_similarity(x,y)
-
-    def soft_indicator(self,x):
-        """
-        f(x) = (1+e^(-beta*x))^(-1)
-        :param x:
-        :param beta: the larger the beta,
-        :return:
-        """
-
-        # important: the element order of z is not the same with that in x
-        # y_pos = torch.exp(-self.beta * x[x >= 0])
-        # z_pos = (1 + y_pos) ** (-1)
-        # y_neg = torch.exp(self.beta * x[x < 0])
-        # z_neg = 1 - (1 + y_neg) ** (-1)
-
-        y = 1 / (1+torch.exp(-self.beta*x))
-        return y
-        # return torch.cat((z_pos, z_neg))
 
     def criterion(self,dp,dm):
 
-        objs = self.soft_indicator(dm - dp)
-        loss = -torch.mean(objs)
+        objs = self.loss(dp - dm)
+        loss = torch.mean(objs)
         acc = torch.mean((dp.data < dm.data).float())  # mini-batch acc, batch size is same as dp/dm
 
         return loss,acc
@@ -113,8 +120,8 @@ class Model(nn.Module):
             mini_P_xms = mini_P_xms.to(self.device)
 
             dp, dm = self.forward(mini_P_x, mini_P_xp, mini_P_xms)
-            objs = self.soft_indicator(dm.data - dp.data)
-            loss = -torch.sum(objs)
+            objs = self.loss(dp.data - dm.data)
+            loss = torch.sum(objs)
             acc = torch.sum((dp.data < dm.data).float())
 
             print(acc)

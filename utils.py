@@ -30,7 +30,7 @@ def vocab2vec(vocab, output_dir, output_name, word_emb, savefmt, type='glove', n
     if type == 'glove':
         with open(word_emb, 'r') as f:
             # todo: remove this if the embedding doesn't have header
-            # f.readline() # skip header
+            f.readline() # skip header
             _, *vec = next(f).rstrip().split(' ')
             vec_dim = len(vec)
     elif type == 'word2vec':
@@ -46,11 +46,11 @@ def vocab2vec(vocab, output_dir, output_name, word_emb, savefmt, type='glove', n
     if type == 'glove':
         mean_emb_vec = np.zeros(vec_dim)
         with open(word_emb, 'r') as f:
-            # f.readline() # skip header
+            f.readline() # skip header
             i = 0
             for line in tqdm(f):
                 word, *vec = line.rstrip().split(' ')
-                # word = word.split('_')[0] # handle the word2vec-wiki
+                word = word.split('_')[0] # handle the word2vec-wiki
                 vec = np.array(vec, dtype=float)
                 mean_emb_vec += vec
 
@@ -83,9 +83,10 @@ def vocab2vec(vocab, output_dir, output_name, word_emb, savefmt, type='glove', n
     # TODO: find better ways to handle OOV
     n_oov = sum(vocab_vec_ind)
     if oov_handle == 'random':
-        print('%d words in vocab, %d words not found in word embedding file, init them with random numbers' % (
-        len_vocab, n_oov))
-        vecs = np.random.rand(vec_dim,n_oov)
+        print('%d words in vocab, %d words not found in word embedding file'% (len_vocab, n_oov))
+        print('they are',np.array(vocab)[vocab_vec_ind])
+        print('init them with random numbers')
+        vecs = np.random.randn(vec_dim,n_oov)
         if normalize:
             vecs = vecs/np.linalg.norm(vecs,axis=0)
         vocab_vec[:,vocab_vec_ind] = vecs

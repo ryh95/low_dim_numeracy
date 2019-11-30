@@ -14,23 +14,23 @@ from torch.utils.data import ConcatDataset, DataLoader
 import torch.nn.functional as F
 import numpy as np
 from config import DATA_DIR, EMB_DIR
-from model import OVAModel, SCModel, SubspaceMapping
+from model import OVAModel, SCModel, SubspaceMapping, PowerHingeLoss, LogisticLoss
 from subspace_magnitude_experiments.local_utils import load_dataset, Minimizer, init_evaluate, train_dev_test_split
 from utils import cosine_distance, vocab2vec
 
 experiments = 'ova'
 
-if experiments == 'ova':
+if experiments == 'ova' or experiments == 'sc_k':
     model = OVAModel
 elif experiments == 'sc':
     model = SCModel
 else:
     assert False
-num_sources = ['inter_nums']
+num_sources = ['sel_orig_nums']
 # num_sources = ['ori']
 fsrc_datas = {}
 # fembs = ['glove.6B.300d_num']
-fembs = ['word2vec-wiki']
+fembs = ['random']
 for src in num_sources:
     fdatas = [src + '_' + experiments + '_' + type for type in ['train', 'dev', 'test']]
     # if no training data, train dev test split
@@ -47,63 +47,56 @@ for src in num_sources:
         fdata_embs = [fdata+'_'+femb for fdata in fdatas]
 
         # if no embedding of training data, prepare and standardize
-        if experiments == 'sc':
 
-            if not isfile(join(EMB_DIR, fdata_embs[0] + '.pickle')):
-                # prepare train/dev/test embedding
-                embs = []
-                nums = []
-                X_root = np.load(join(DATA_DIR, src + '_' + experiments + '.npy'), allow_pickle=True)
-                X_root_num = list(set(np.array(X_root).flat))
-                X_root_num_demb, _ = vocab2vec(X_root_num, output_dir=EMB_DIR, output_name=fdata_embs[0],
-                                               word_emb=join(EMB_DIR, femb + '.txt'), savefmt=['None'])
-                for fdata in fdatas:
-                    X = np.load(join(DATA_DIR, fdata + '.npy'), allow_pickle=True)
-                    X_num = list(set(np.array(X).flat))
-                    nums.append(X_num)
-                    X_num_emb = np.zeros((len(X_num),300))
-                    for i,nu in enumerate(X_num):
-                        X_num_emb[i,:] = X_root_num_demb[nu]
-                    embs.append(X_num_emb)
+        if not isfile(join(EMB_DIR, fdata_embs[0] + '.pickle')):
+            # prepare train/dev/test embedding
+            embs = []
+            nums = []
+            X_root = np.load(join(DATA_DIR, src + '_' + experiments + '.npy'), allow_pickle=True)
+            X_root_num = list(set(np.array(X_root).flat))
+            X_root_num_demb, _ = vocab2vec(X_root_num, output_dir=EMB_DIR, output_name=fdata_embs[0],
+                                           word_emb=join(EMB_DIR, femb + '.txt'), savefmt=['None'])
+            for fdata in fdatas:
+                X = np.load(join(DATA_DIR, fdata + '.npy'), allow_pickle=True)
+                X_num = list(set(np.array(X).flat))
+                nums.append(X_num)
+                X_num_emb = np.zeros((len(X_num),300))
+                for i,nu in enumerate(X_num):
+                    X_num_emb[i,:] = X_root_num_demb[nu]
+                embs.append(X_num_emb)
 
-                # for fdata,fdata_emb in zip(fdatas,fdata_embs):
-                #     X = np.load(join(DATA_DIR,fdata + '.npy'),allow_pickle=True)
-                #     X_num = list(set(np.array(X).flat))
-                #     nums.append(X_num)
-                #     _,vocab_vec = vocab2vec(X_num, output_dir=EMB_DIR, output_name=fdata_emb,
-                #                             word_emb=join(EMB_DIR, femb + '.txt'), savefmt=['None'])
-                #     embs.append(vocab_vec)
-                emb_train,emb_dev,emb_test = embs
-                # standardize the embedding
-                scaler = StandardScaler()
-                emb_train = scaler.fit_transform(emb_train)
-                emb_dev = scaler.transform(emb_dev)
-                emb_test = scaler.transform(emb_test)
-                embs = [emb_train,emb_dev,emb_test]
-                for i in range(3):
-                    with open(join(EMB_DIR, fdata_embs[i] + '.pickle'), 'wb') as handle:
-                        pickle.dump({num:embs[i][j,:] for j,num in enumerate(nums[i])}, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        else:
-            if not isfile(join(EMB_DIR,src + '_' + experiments+'_'+femb+'.pickle')):
-
-                X_root = np.load(join(DATA_DIR, src + '_' + experiments + '.npy'), allow_pickle=True)
-                X_root_num = list(set(np.array(X_root).flat))
-                X_root_num_demb, _ = vocab2vec(X_root_num, output_dir=EMB_DIR, output_name=src + '_' + experiments+'_'+femb,
-                                               word_emb=join(EMB_DIR, femb + '.txt'), savefmt=['pickle'])
-
-            # todo: standardize the number embedding?
+            # for fdata,fdata_emb in zip(fdatas,fdata_embs):
+            #     X = np.load(join(DATA_DIR,fdata + '.npy'),allow_pickle=True)
+            #     X_num = list(set(np.array(X).flat))
+            #     nums.append(X_num)
+            #     _,vocab_vec = vocab2vec(X_num, output_dir=EMB_DIR, output_name=fdata_emb,
+            #                             word_emb=join(EMB_DIR, femb + '.txt'), savefmt=['None'])
+            #     embs.append(vocab_vec)
+            emb_train,emb_dev,emb_test = embs
+            # standardize the embedding
+            scaler = StandardScaler()
+            emb_train = scaler.fit_transform(emb_train)
+            emb_dev = scaler.transform(emb_dev)
+            emb_test = scaler.transform(emb_test)
+            embs = [emb_train,emb_dev,emb_test]
+            for i in range(3):
+                with open(join(EMB_DIR, fdata_embs[i] + '.pickle'), 'wb') as handle:
+                    pickle.dump({num:embs[i][j,:] for j,num in enumerate(nums[i])}, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
     fsrc_datas[src] = fdatas
 
 base_workspace = {
     'train_verbose':True,
-    'n_epochs':30,
+    'n_epochs':50,
     'mini_batch_size':256,
     'emb_dim':300,
     'model':model,
-    'mapping_type':'nn',
-    'save_model': True,
+    'mapping_type':'subspace',
+    # 'subspace_dim':160,
+    'loss': LogisticLoss,
+    'loss_params':{'beta':18},
+    'save_model': False,
     'select_inter_model':False,
     'eval_data': ['val'],
     'working_status': 'optimize', # 'optimize'/ 'infer' / 'eval'
@@ -111,8 +104,8 @@ base_workspace = {
     'distance_metric':'cosine'
 }
 mini_func = gp_minimize
-# optimize_types = ['subspace_dim','beta','lr']
-optimize_types = ['n_hidden1','n_out','beta','lr']
+optimize_types = ['subspace_dim','lr']
+# optimize_types = ['n_hidden1','n_out','lr']
 minimizer = Minimizer(base_workspace, optimize_types, mini_func)
 
 # embs = ['skipgram-2_num','skipgram-5_num','wiki-news-300d-1M-subword_num','crawl-300d-2M-subword_num', 'glove.840B.300d','glove.6B.300d']
@@ -165,7 +158,7 @@ for src in num_sources:
         if 'random' in femb:
             emb_conf['dim'] = 300
         emb_conf['emb_fname'] = femb
-        test_dataset = load_dataset(fsrc_datas[src][-1], emb_conf, pre_load=False)
+        test_dataset = load_dataset(fsrc_datas[src][-1], emb_conf)
         print('test acc in original space of %s: %.4f'%(femb,init_evaluate(test_dataset,cosine_distance)))
 
 for src in num_sources:
@@ -176,15 +169,21 @@ for src in num_sources:
         emb_conf['emb_fname'] = femb
         datas = []
         for fdata in fsrc_datas[src]:
-            datas.append(load_dataset(fdata, emb_conf, pre_load=False))
+            datas.append(load_dataset(fdata, emb_conf))
 
         minimizer.base_workspace['train_data'] = datas[0]
         minimizer.base_workspace['val_data'] = datas[1]
 
         # order should be the same as the "optimize_types"
-        space = [Categorical([64,128]),
-                 Categorical([32,64]),
-                 Integer(1, 12),
+        # space = [Integer(2, 256),
+        #          Integer(2, 256),
+        #          Real(10 ** -5, 10 ** 0, "log-uniform"),
+        #          ]
+        # space = [Integer(2, 256),
+        #          Integer(1, 30),
+        #          Real(10 ** -5, 10 ** 0, "log-uniform"),
+        #          ]
+        space = [Integer(2,256),
                  Real(10 ** -5, 10 ** 0, "log-uniform"),
                  ]
 
@@ -198,7 +197,8 @@ for src in num_sources:
             x0,y0 = int_res.x_iters,int_res.func_vals
             res = minimizer.minimize(space, x0=x0, y0=y0, n_calls=50-len(x0), callback=[checkpoint_callback], verbose=True)
         else:
-            x0 = [128,64,6,0.001]
+            # x0 = [128,64,6,0.001]
+            x0 = [160,0.0025]
             res = minimizer.minimize(space, x0=x0, n_calls=50, callback=[checkpoint_callback], verbose=True)
 
         results_fname = '_'.join(['results', src, experiments, femb])
