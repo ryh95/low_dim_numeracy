@@ -18,7 +18,7 @@ from model import OVAModel, SCModel, SubspaceMapping, PowerHingeLoss, LogisticLo
 from subspace_magnitude_experiments.local_utils import load_dataset, Minimizer, init_evaluate, train_dev_test_split
 from utils import cosine_distance, vocab2vec
 
-experiments = 'ova'
+experiments = 'sc_k'
 
 if experiments == 'ova' or experiments == 'sc_k':
     model = OVAModel
@@ -30,7 +30,8 @@ num_sources = ['sel_orig_nums']
 # num_sources = ['ori']
 fsrc_datas = {}
 # fembs = ['glove.6B.300d_num']
-fembs = ['random']
+fembs = ['word2vec-wiki','random']
+
 for src in num_sources:
     fdatas = [src + '_' + experiments + '_' + type for type in ['train', 'dev', 'test']]
     # if no training data, train dev test split
@@ -65,13 +66,6 @@ for src in num_sources:
                     X_num_emb[i,:] = X_root_num_demb[nu]
                 embs.append(X_num_emb)
 
-            # for fdata,fdata_emb in zip(fdatas,fdata_embs):
-            #     X = np.load(join(DATA_DIR,fdata + '.npy'),allow_pickle=True)
-            #     X_num = list(set(np.array(X).flat))
-            #     nums.append(X_num)
-            #     _,vocab_vec = vocab2vec(X_num, output_dir=EMB_DIR, output_name=fdata_emb,
-            #                             word_emb=join(EMB_DIR, femb + '.txt'), savefmt=['None'])
-            #     embs.append(vocab_vec)
             emb_train,emb_dev,emb_test = embs
             # standardize the embedding
             scaler = StandardScaler()
@@ -98,8 +92,8 @@ base_workspace = {
     'loss_params':{'beta':18},
     'save_model': False,
     'select_inter_model':False,
-    'eval_data': ['val'],
-    'working_status': 'optimize', # 'optimize'/ 'infer' / 'eval'
+    # 'eval_data': ['val'],
+    # 'working_status': 'optimize', # 'optimize'/ 'infer' / 'eval'
     'optimizer':torch.optim.Adam,
     'distance_metric':'cosine'
 }
@@ -108,61 +102,21 @@ optimize_types = ['subspace_dim','lr']
 # optimize_types = ['n_hidden1','n_out','lr']
 minimizer = Minimizer(base_workspace, optimize_types, mini_func)
 
-# embs = ['skipgram-2_num','skipgram-5_num','wiki-news-300d-1M-subword_num','crawl-300d-2M-subword_num', 'glove.840B.300d','glove.6B.300d']
-# embs = ['random-1','random-2','random-3','random-4','random-5']
-# embs = ['random']
+test_res = np.zeros((len(num_sources),len(fembs),2))
 
-# dataset = load_dataset(subspace_magnitude_experiments,{'emb_fname':'wiki-news-300d-1M-subword_num'})
-# cosine_distance = lambda x,y: 1 - F.cosine_similarity(x,y)
-# print(init_evaluate(dataset,cosine_distance))
-
-# for fname in embs:
-#     dataset = load_dataset('scmag_str',{'emb_fname':fname})
-#
-#     # evaluate the embedding at the original space
-#     print(init_evaluate(dataset,cosine_distance))
-
-# params = torch.load('128_300_1_cosine_0.0255_50.pt')
-# model = model(128,300,1,base_workspace['distance_metric'])
-# model.W = torch.nn.Parameter(params['W'])
-# train_data = load_dataset('scmag_str', {'emb_fname':'random-1'},pre_load=False)
-#
-# num_emb = torch.stack([v for _,v in train_data.number_emb_dict.items()])
-# s_num_emb = num_emb @ model.W.cpu()
-#
-# mini_batchs = DataLoader(train_data, batch_size=base_workspace['mini_batch_size'], shuffle=True, num_workers=0, pin_memory=True)
-# acc,_ = model.evaluate(mini_batchs)
-# print(acc)
-# exit()
-
-# for fname in embs:
-#     emb_conf = {}
-#     if 'random' in fname:
-#         emb_conf['dim'] = 300
-#     emb_conf['emb_fname'] = fname
-#     train_data = load_dataset('scmag_str', emb_conf,pre_load=False)
-#     print(len(train_data))
-#     # val_data = load_dataset(fdev, emb_conf)
-#     minimizer.base_workspace['train_data'] = train_data
-#     # base_workspace['val_data'] = val_data
-#     results_fname = '_'.join(['results', fname])
-#     res = skopt.load(results_fname+'.pkl')
-#     print(res.x)
-#     eval_accs = minimizer.objective(res.x)
-#     print('train acc: %f'%(eval_accs['train']))
-#     # print('val acc: %f'%(eval_accs['val']))
-
-for src in num_sources:
-    for femb in fembs:
+for i,src in enumerate(num_sources):
+    for j,femb in enumerate(fembs):
         emb_conf = {}
         if 'random' in femb:
             emb_conf['dim'] = 300
         emb_conf['emb_fname'] = femb
         test_dataset = load_dataset(fsrc_datas[src][-1], emb_conf)
-        print('test acc in original space of %s: %.4f'%(femb,init_evaluate(test_dataset,cosine_distance)))
+        orig_test_acc = init_evaluate(test_dataset, cosine_distance)
+        test_res[i][j][0] = orig_test_acc
+        print('test acc in original space of %s: %.4f'%(femb,orig_test_acc))
 
-for src in num_sources:
-    for femb in fembs:
+for i,src in enumerate(num_sources):
+    for j,femb in enumerate(fembs):
         emb_conf = {}
         if 'random' in femb:
             emb_conf['dim'] = 300
@@ -173,6 +127,9 @@ for src in num_sources:
 
         minimizer.base_workspace['train_data'] = datas[0]
         minimizer.base_workspace['val_data'] = datas[1]
+
+        minimizer.base_workspace['working_status'] = 'optimize'
+        minimizer.base_workspace['eval_data'] = ['val']
 
         # order should be the same as the "optimize_types"
         # space = [Integer(2, 256),
@@ -213,4 +170,7 @@ for src in num_sources:
         minimizer.base_workspace['eval_data'] = ['test']
 
         test_acc = minimizer.objective(res.x)
+        test_res[i][j][1] = test_acc
         print('test acc: %f'% (test_acc))
+# save results
+np.save('test_res',test_res)
