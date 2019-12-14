@@ -41,7 +41,10 @@ for i in range(n_trials):
             X_test = np.random.randn(len(sel_nums_test), 300)
             y_test = np.array(sel_nums_test, dtype=float)
         else:
-            X_train,y_train,X_val,y_val,X_test,y_test = load_num_emb(femb,sel_nums_train,sel_nums_val,sel_nums_test)
+            X_ys = []
+            for sel_nums_split in [sel_nums_train,sel_nums_val,sel_nums_test]:
+                X_ys += list(load_num_emb(femb,sel_nums_split))
+            X_train,y_train,X_val,y_val,X_test,y_test = X_ys
 
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X_train)

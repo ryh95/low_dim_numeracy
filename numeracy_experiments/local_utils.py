@@ -68,7 +68,7 @@ def prepare_separation_data(femb):
     print('word embedding: ',X_word.shape)
     return X,y
 
-def load_num_emb(femb, sel_nums_train, sel_nums_val, sel_nums_test):
+def load_num_emb(femb, sel_nums):
     '''
     load number embedding from femb
     embedding in femb should be all number embedding
@@ -76,39 +76,25 @@ def load_num_emb(femb, sel_nums_train, sel_nums_val, sel_nums_test):
     :return:
     '''
     # todo: possible duplicate with utils/preprocess_google_news_skip
-    number_emb_train,number_target_train = [],[]
+    number_emb,number_target = [],[]
     number_emb_val, number_target_val = [], []
     number_emb_test, number_target_test = [], []
     print('prepare data...')
-    sel_nums_train_set = set(sel_nums_train)
-    sel_nums_val_set = set(sel_nums_val)
-    sel_nums_test_set = set(sel_nums_test)
+    sel_nums_set = set(sel_nums)
     with open(join(EMB_DIR, femb+'.txt'), 'r') as f:
         f.readline()
         for line in tqdm(f):
             word, *vec = line.rstrip().split(' ')
             vec = np.array(vec, dtype=float)
             word = word.split('_')[0]
-            if word in sel_nums_train_set:
-                number_emb_train.append(vec)
-                number_target_train.append(float(word))
-                sel_nums_train_set.remove(word)
-            elif word in sel_nums_val_set:
-                number_emb_val.append(vec)
-                number_target_val.append(float(word))
-                sel_nums_val_set.remove(word)
-            elif word in sel_nums_test_set:
-                number_emb_test.append(vec)
-                number_target_test.append(float(word))
-                sel_nums_test_set.remove(word)
+            if word in sel_nums_set:
+                number_emb.append(vec)
+                number_target.append(float(word))
+                sel_nums_set.remove(word)
 
-    X_train = np.stack(number_emb_train)
-    y_train = np.array(number_target_train)
-    X_val = np.stack(number_emb_val)
-    y_val = np.array(number_target_val)
-    X_test = np.stack(number_emb_test)
-    y_test = np.array(number_target_test)
-    return X_train,y_train,X_val,y_val,X_test,y_test
+    X = np.stack(number_emb)
+    y = np.array(number_target)
+    return X,y
 
 def parallel_predict(X, predict_func, n_cores):
     n_samples = X.shape[0]
@@ -214,6 +200,36 @@ class SeparableExperiments(object):
         f1 = f1_score(self.exp_data['y'], y_pred)
         print(self.name,f1)
         return f1
+
+class SepMagExp(object):
+
+    def __init__(self, exp_name, save_results, exp_data):
+        self.name = exp_name
+        self.save_results = save_results
+        self.exp_data = exp_data
+
+    def run(self):
+
+        iteration = 30000
+        name = self.name.split('_')[0]
+        if name == 'glove-wiki' or name == 'word2vec-wiki' or name == 'word2vec-giga':
+            iteration = 20000
+
+        svc = SVC(kernel='poly', degree=3, gamma=1 / 300, coef0=0, C=1,
+                  cache_size=4000, class_weight='balanced', verbose=True, max_iter=iteration)
+        start = time.time()
+        svc.fit(self.exp_data['X'], self.exp_data['y'])
+        print('fit time: ', time.time() - start)
+
+        # use the perpendicular direction that separates the numbers and words
+        # to predict magnitude
+        sel_pred_mag = svc.decision_function(self.exp_data['sel_X'])
+        # evaluate the predicted magnitude with the test in wallace et.al
+        error = sqrt(mean_squared_error(self.exp_data['sel_mag'], sel_pred_mag))
+        if self.save_results:
+            np.save(self.name,error)
+        return error
+
 
 class MagnitudeExperiments2(object):
 
