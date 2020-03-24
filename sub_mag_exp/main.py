@@ -1,8 +1,9 @@
 import torch
 from skopt import gp_minimize
-from model import OVAModel, SCModel, LogisticLoss
-from subspace_magnitude_experiments.experiments import SubspaceMagExp
-from subspace_magnitude_experiments.local_utils import Minimizer
+
+from ..model import OVAModel, SCModel, LogisticLoss
+from .experiments import SubspaceMagExp
+from .minimizer import Minimizer
 
 exp_type = 'sc_k'
 

@@ -8,9 +8,9 @@ from skopt import dump
 from skopt.space import Integer, Real
 from torch.utils.data import ConcatDataset
 
-from config import DATA_DIR, EMB_DIR
-from subspace_magnitude_experiments.local_utils import load_dataset, init_evaluate
-from utils import vocab2vec, cosine_distance
+from ..config import DATA_DIR, EMB_DIR
+from .utils import load_dataset, init_evaluate
+from ..utils import vocab2vec, cosine_distance
 
 
 class SubspaceMagExp(object):

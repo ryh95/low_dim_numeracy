@@ -1,16 +1,16 @@
-import time
 from os.path import splitext
 
 import numpy as np
 from joblib import Parallel, delayed
-from sklearn.metrics import f1_score
 from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVC
 from sklearn.utils import shuffle
 
-from numeracy_experiments.local_utils import prepare_separation_data, SeparableExperiments, parallel_predict
+from .experiments import SeparableExperiments
+from .utils import prepare_separation_data
 
 fembs = ['word2vec-wiki.txt','word2vec-giga.txt','glove-giga.txt','glove-wiki.txt','fasttext-wiki.txt','fasttext-giga.txt']
+# fembs = ['word2vec-wiki.txt']
+# fembs = ['fasttext-giga.txt']
 for femb in fembs:
     X,y = prepare_separation_data(femb)
 

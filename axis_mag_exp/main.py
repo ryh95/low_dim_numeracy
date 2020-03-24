@@ -1,28 +1,17 @@
-from math import sqrt
-from os.path import splitext, join
+from os.path import join
 
-from keras import Sequential
-from keras.layers import Dense, Dropout
-from keras.optimizers import Adam
-from keras.wrappers.scikit_learn import KerasRegressor
-from sklearn.kernel_ridge import KernelRidge
-from sklearn.linear_model import Ridge
-from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVR
 import numpy as np
-from skopt import gp_minimize, dump
-from skopt.callbacks import CheckpointSaver
-from skopt.space import Real, Categorical, Integer
 from termcolor import colored
 
-from config import VOCAB_DIR
-from numeracy_experiments.local_utils import load_num_emb, MagnitudeExperiments2
+from ..config import VOCAB_DIR
+from .utils import load_num_emb
+from .experiment import MagnitudeAxisExperiments
 
 fembs = ['word2vec-wiki','word2vec-giga','glove-wiki','glove-giga','fasttext-wiki','fasttext-giga','random']
 test_models = ['ridge','kernel_ridge','kernel_ridge_separation']
-sel_nums = np.load(join(VOCAB_DIR,'inter_nums.npy'))
+sel_nums = np.load(join(VOCAB_DIR,'nums2.npy'))
 n_trials = 10
 results = np.zeros((n_trials,len(fembs),len(test_models)))
 
@@ -70,7 +59,7 @@ for i in range(n_trials):
         for k,model in enumerate(test_models):
 
             exp_name = femb+'_'+model+'_'+str(i)
-            exp = MagnitudeExperiments2(exp_name, False, {'model':model, 'base_workspace':base_workspace})
+            exp = MagnitudeAxisExperiments(exp_name, False, {'model':model, 'base_workspace':base_workspace})
             error = exp.run()
             # save results
             results[i][j][k] = error

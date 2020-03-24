@@ -1,28 +1,13 @@
-import pickle
 import time
-from os.path import join
-
-import torch
 
 import numpy as np
 from sklearn.metrics import f1_score
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.utils import shuffle
-from skopt import gp_minimize
-from skopt.callbacks import CheckpointSaver
-from skopt.space import Real, Integer, Categorical
-from skopt.utils import use_named_args
-from torch.utils.data import DataLoader
 
-from tqdm import tqdm
-
-from config import EMB, EMB_DIR, DATA_DIR
-from subspace_magnitude_experiments.local_utils import load_dataset, init_evaluate
-from numeracy_experiments.local_utils import KernelDistance, cosine_distance, prepare_separation_data, Minimizer, \
-    parallel_predict
-from utils import is_number, is_valid_triple
+from sub_mag_exp.local_utils import load_dataset, init_evaluate
+from archived_code.local_utils import cosine_distance, prepare_separation_data, parallel_predict
 
 # collect data
 # X: embedding, Y: label(number or not)

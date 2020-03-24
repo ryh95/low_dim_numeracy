@@ -5,7 +5,7 @@ from skopt.space import Integer, Real, Categorical
 from skopt.utils import dump
 
 from model import OVA_Subspace_Model, SC_Subspace_Model
-from subspace_magnitude_experiments.local_utils import load_dataset, Minimizer
+from sub_mag_exp.local_utils import load_dataset, Minimizer
 
 emb_fname = 'glove.6B.300d' # or 'random'
 experiments = 'sc'

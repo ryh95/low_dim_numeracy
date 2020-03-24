@@ -50,7 +50,6 @@ def vocab2vec(vocab, output_dir, output_name, word_emb, savefmt, type='glove', n
             i = 0
             for line in tqdm(f):
                 word, *vec = line.rstrip().split(' ')
-                word = word.split('_')[0] # handle the word2vec-wiki
                 vec = np.array(vec, dtype=float)
                 mean_emb_vec += vec
 
