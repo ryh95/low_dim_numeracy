@@ -24,6 +24,7 @@ class SubspaceMapping(nn.Module):
 
     def __init__(self,dim,d):
         super(SubspaceMapping,self).__init__()
+        # todo: make device explicit
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.W = nn.Parameter(torch.randn((dim, d),device=self.device))
         # self.W = torch.randn((dim, d), requires_grad=True,device=self.device)
@@ -37,6 +38,7 @@ class SubspaceMapping(nn.Module):
         # ref: http://people.csail.mit.edu/bkph/articles/Nearest_Orthonormal_Matrix.pdf
         # ref: https://math.stackexchange.com/q/2500881
         # ref: https://math.stackexchange.com/a/2215371
+        # ref: https://github.com/pytorch/pytorch/issues/28293
         try:
             u, s, vh = scipy_linalg.svd(self.W.data.cpu().numpy(),full_matrices=False,lapack_driver='gesvd')
             self.W.data = torch.from_numpy(u @ vh).to(self.device)

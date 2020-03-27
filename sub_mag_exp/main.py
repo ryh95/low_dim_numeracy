@@ -1,20 +1,24 @@
+from os.path import join
+
 import torch
 from skopt import gp_minimize
 
-from ..model import OVAModel, SCModel, LogisticLoss
-from .experiments import SubspaceMagExp
-from .minimizer import Minimizer
+from config import SUB_MAG_EXP_DIR, EMB_DIR
+from model import OVAModel, SCModel, LogisticLoss
+from sub_mag_exp.helper.experiments import SubspaceMagExp
+from sub_mag_exp.helper.minimizer import Minimizer
 
-exp_type = 'sc_k'
+exp_type = 'sc-k'
+num_src = 'nums1-3'
 
-if exp_type == 'ova' or exp_type == 'sc_k':
+if exp_type == 'ova' or exp_type == 'sc-k':
     model = OVAModel
 elif exp_type == 'sc':
     model = SCModel
 else:
     assert False
-num_sources = ['sel_orig_nums']
-fembs = ['word2vec-giga','glove-wiki','glove-giga','fasttext-wiki','fasttext-giga']
+
+emb_types = ['word2vec-wiki','word2vec-giga', 'glove-wiki', 'glove-giga', 'fasttext-wiki', 'fasttext-giga']
 exps = []
 
 base_workspace = {
@@ -39,18 +43,16 @@ optimize_types = ['subspace_dim','lr']
 # optimize_types = ['n_hidden1','n_out','lr']
 minimizer = Minimizer(base_workspace, optimize_types, mini_func)
 
-
-for src in num_sources:
-    for femb in fembs:
-        exp_data = {
-            'num_src':src,
-            'exp_type':exp_type,
-            'femb':femb,
-            'minimizer':minimizer
-        }
-        exp_name = '_'.join(['test','results', src, exp_type, femb])
-        exp = SubspaceMagExp(exp_name, True, exp_data)
-        exps.append(exp)
+for emb_type in emb_types:
+    exp_data = {
+        'num_src': num_src,
+        'emb_type': emb_type,
+        'exp_type': exp_type,
+        'minimizer': minimizer
+    }
+    exp_name = '_'.join([num_src, exp_type, emb_type])
+    exp = SubspaceMagExp(exp_name, exp_data)
+    exps.append(exp)
 
 for exp in exps:
     exp.run()
