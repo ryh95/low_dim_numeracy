@@ -59,6 +59,24 @@ class SubspaceMapping(nn.Module):
         # return shape Bxs / B x n-2 x s
         return x @ self.W
 
+class AxisMapping(nn.Module):
+
+    def __init__(self,d):
+        super(AxisMapping,self).__init__()
+        # todo: make device explicit
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.w = nn.Parameter(torch.randn(d,device=self.device))
+        self.w.data = self.w.data / torch.norm(self.w).data # unit
+
+    def project(self):
+        self.w.data = self.w.data / torch.norm(self.w).data # unit
+
+    def forward(self, x):
+        # Bxd / Bxkxd
+        # return shape B/Bxk
+        return x @ self.w
+
+
 class PowerHingeLoss(_Loss):
 
     def forward(self, x):
@@ -81,10 +99,10 @@ class LogisticLoss(_Loss):
         # return y
         return torch.cat((z_pos, z_neg))
 
-class Model(nn.Module):
+class SubspaceMag(nn.Module):
 
     def __init__(self, mapping_model, distance_type, loss):
-        super(Model,self).__init__()
+        super(SubspaceMag, self).__init__()
         self.mapping = mapping_model
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.loss = loss
@@ -137,7 +155,7 @@ class Model(nn.Module):
         acc = torch.sum(torch.stack(accs))/len(data_batches.dataset)
         return acc.item(),loss.item()
 
-class OVAModel(Model):
+class OVAModel(SubspaceMag):
 
     def forward(self,mini_P_x, mini_P_xp, mini_P_xms):
         map_min_P_x = self.mapping(mini_P_x)
@@ -148,7 +166,7 @@ class OVAModel(Model):
 
         return dp,dm
 
-class SCModel(Model):
+class SCModel(SubspaceMag):
 
     def forward(self, mini_P_x, mini_P_xp, mini_P_xm):
         map_min_P_x = self.mapping(mini_P_x)
@@ -158,3 +176,59 @@ class SCModel(Model):
         dm = self.distance(map_min_P_x, map_min_P_xm)
 
         return dp, dm
+
+class AxisOrdering(nn.Module):
+
+    def __init__(self, mapping_model, loss):
+        super(AxisOrdering, self).__init__()
+        self.mapping = mapping_model
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.loss = loss
+
+    def criterion(self, ap, am):
+
+        objs = self.loss(ap - am)
+        loss = torch.mean(objs)
+        acc = torch.mean((ap.data < am.data).float())  # mini-batch acc, batch size is same as dp/dm
+
+        return loss,acc
+
+    def forward(self, mini_P_x, mini_P_xms):
+        ap = self.mapping(mini_P_x) # B
+        ams = self.mapping(mini_P_xms)# Bxk
+        am = torch.min(ams,dim=1)[0] # B
+        return ap,am
+
+    def evaluate(self,data_batches):
+        """
+        evaluate w on data_batches, i.e., all data in data batches
+        :param data_batches:
+        :return:
+        """
+        losses, accs = [],[]
+        # start = time.time()
+        # num_mini_batches = 0
+
+        # print(self.mapping.W)
+
+        for mini_batch in data_batches:
+            mini_P_x, mini_P_xms = mini_batch
+
+            mini_P_x = mini_P_x.to(self.device)  # can set non_blocking=True
+            mini_P_xms = mini_P_xms.to(self.device)
+
+            ap, am = self.forward(mini_P_x, mini_P_xms)
+            objs = self.loss(ap.data - am.data)
+            loss = torch.sum(objs)
+            acc = torch.sum((ap.data < am.data).float())
+
+            print(acc)
+
+            losses.append(loss)
+            accs.append(acc)
+            # num_mini_batches += 1
+        # print(num_mini_batches)
+        # print("evaluate: ", time.time() - start)
+        loss = torch.sum(torch.stack(losses))/len(data_batches.dataset)
+        acc = torch.sum(torch.stack(accs))/len(data_batches.dataset)
+        return acc.item(),loss.item()

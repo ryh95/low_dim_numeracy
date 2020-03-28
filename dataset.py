@@ -63,3 +63,23 @@ class SCDataset(BaseDataset):
         P_xp = self.number_emb[test_sample[1]]
         P_xm = self.number_emb[test_sample[2]]
         return P_x,P_xp,P_xm
+
+class OrdDataset(BaseDataset):
+
+    def __getitem__(self, idx):
+        """
+
+        :param idx: id of the sample
+        :return: the embeded sample corresponding with the idx
+        """
+
+        sample = self.X[idx]
+        k = sample.shape[0]
+        d = next(iter(self.number_emb.values())).numel()
+        P_xms = torch.zeros(k, d, dtype=torch.float32) # kxd
+        for i, (x, xm) in enumerate(sample):
+            P_xms[i, :] = self.number_emb[xm]
+
+        P_x = self.number_emb[sample[0][0]] # d
+
+        return P_x, P_xms
