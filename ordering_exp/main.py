@@ -5,12 +5,15 @@ from model import LogisticLoss, AxisOrdering
 from ordering_exp.helper.experiments import OrderdingExp
 from ordering_exp.helper.minimizer import Minimizer
 
-exp_type = 'ord-k'
+k = 1
+
+exp_type = 'ord-'+str(k)
 num_src = 'nums1-3'
 
 model = AxisOrdering
 
-emb_types = ['word2vec-wiki','word2vec-giga', 'glove-wiki', 'glove-giga', 'fasttext-wiki', 'fasttext-giga']
+# emb_types = ['word2vec-wiki','word2vec-giga', 'glove-wiki', 'glove-giga', 'fasttext-wiki', 'fasttext-giga']
+emb_types = ['word2vec-wiki']
 exps = []
 
 base_workspace = {
@@ -21,7 +24,7 @@ base_workspace = {
     'model':model,
     'mapping_type':'subspace',
     'loss': LogisticLoss,
-    'loss_params':{'beta':16},
+    # 'loss_params':{'beta':16},
     'save_model': False,
     'select_inter_model':False,
     # 'train_data':
@@ -32,7 +35,7 @@ base_workspace = {
     'optimizer':torch.optim.Adam,
 }
 mini_func = gp_minimize
-optimize_types = ['lr']
+optimize_types = ['loss__beta','lr']
 minimizer = Minimizer(base_workspace, optimize_types, mini_func)
 
 for emb_type in emb_types:

@@ -84,10 +84,11 @@ class OrderdingExp(object):
 
         # optimize space
         # learning rate
-        space = [Real(10 ** -5, 10 ** 0, "log-uniform")]
+        space = [Integer(2,20),
+            Real(10 ** -5, 10 ** 0, "log-uniform")]
 
         # x0 = [128,64,6,0.001]
-        x0 = [0.0025]
+        x0 = [10,0.0025]
         res = minimizer.minimize(space, x0=x0, n_calls=50, verbose=True)
 
 

@@ -1,4 +1,5 @@
 from os.path import join
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -19,7 +20,8 @@ def prepare_ord_k(fnums,k=100):
         X_ord_k[i,:,1] = s_numbers[i+1:i+k+1]
 
     print('number of ord_k tests: %d' % (nums.size-k))
-    fX_ord_k = fnums + '_ord-k'
+    fX_ord_k = fnums + '_ord-'+str(k)
+    Path(join(ORD_EXP_DIR,'data')).mkdir(parents=True,exist_ok=True)
     np.save(join(ORD_EXP_DIR, 'data', fX_ord_k), X_ord_k)
     return X_ord_k
 
