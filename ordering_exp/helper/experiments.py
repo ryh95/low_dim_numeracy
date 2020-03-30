@@ -1,6 +1,6 @@
 import pickle
 from os.path import join
-
+import os
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -28,13 +28,21 @@ class OrderdingExp(object):
         fX_splits = [fX + '_' + type for type in ['train', 'dev', 'test']] # nums1-3_ord-k_train
 
         # prepare train dev test split
-        print('prepare train dev and test')
-        X = np.load(join(ORD_EXP_DIR, 'data', fX + '.npy'), allow_pickle=True)
-        X_train, X_test = train_test_split(X, test_size=0.2)
-        X_train, X_val = train_test_split(X_train, test_size=0.1875)
-        X_splits = [X_train, X_val, X_test]
-        for name, data in zip(fX_splits, X_splits):
-            np.save(name, data)
+        if os.path.exists(fX_splits[0]+'.npy'):
+            # if train dev test split exists
+            print('load train dev and test')
+            X_train = np.load(fX_splits[0]+'.npy', allow_pickle=True)
+            X_val = np.load(fX_splits[1] + '.npy', allow_pickle=True)
+            X_test = np.load(fX_splits[2] + '.npy', allow_pickle=True)
+            X_splits = [X_train, X_val, X_test]
+        else:
+            print('prepare train dev and test')
+            X = np.load(join(ORD_EXP_DIR, 'data', fX + '.npy'), allow_pickle=True)
+            X_train, X_test = train_test_split(X, test_size=0.2)
+            X_train, X_val = train_test_split(X_train, test_size=0.1875)
+            X_splits = [X_train, X_val, X_test]
+            for name, data in zip(fX_splits, X_splits):
+                np.save(name, data)
 
         # standardize number embeddings and prepare train/dev/test embedding
         embs = []
@@ -63,16 +71,16 @@ class OrderdingExp(object):
         with open(num_src+'_'+emb_type+'_st.pkl', 'wb') as handle: # nums1-3_word2vec-wiki_st.pkl
             pickle.dump(num_emb_st, handle,protocol=pickle.HIGHEST_PROTOCOL)
 
-        # todo: show accuracy of test set in original space
-        # testset = load_batched_samples(X_test, num_emb_st, pre_emb=False)
-        # orig_test_acc = init_evaluate(testset, cosine_distance)
-        # print('test acc in original space of %s: %.4f' % (emb_type, orig_test_acc))
+        # todo: show accuracy of test set on the axis
+        testset = load_batched_samples(X_test, num_emb_st)
+        test_acc = init_evaluate(testset, 50)
+        print('test acc in the subspace of %s: %.4f' % (emb_type, test_acc))
 
         # show accuracy of test set in subspace
         datasets = []
         for X_split in X_splits:
             # load train val test dataset
-            datasets.append(load_batched_samples(X_split, num_emb_st, pre_emb=False))
+            datasets.append(load_batched_samples(X_split, num_emb_st))
 
         minimizer.base_workspace['train_data'] = datasets[0]
         minimizer.base_workspace['val_data'] = datasets[1]
@@ -100,12 +108,12 @@ class OrderdingExp(object):
         minimizer.base_workspace['working_status'] = 'infer'
         minimizer.base_workspace['eval_data'] = ['test']
 
-        test_acc = minimizer.objective(res.x)
-        print('test acc: %f' % (test_acc))
+        opt_test_acc = minimizer.objective(res.x)
+        print('test acc: %f' % (opt_test_acc))
 
         # save results
         results_fname = '_'.join(['res-hyp', self.name])
         dump(res, results_fname + '.pkl', store_objective=False)
-        np.save('_'.join(['res-acc',self.name]),np.array([test_acc]))
+        np.save('_'.join(['res-acc',self.name]),np.array([test_acc,opt_test_acc]))
 
-        return test_acc
+        return test_acc,opt_test_acc

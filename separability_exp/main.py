@@ -5,8 +5,8 @@ from joblib import Parallel, delayed
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils import shuffle
 
-from .experiments import SeparableExperiments
-from .utils import prepare_separation_data
+from separability_exp.helper.experiments import SeparableExperiments
+from separability_exp.helper.utils import prepare_separation_data
 
 fembs = ['word2vec-wiki.txt','word2vec-giga.txt','glove-giga.txt','glove-wiki.txt','fasttext-wiki.txt','fasttext-giga.txt']
 # fembs = ['word2vec-wiki.txt']

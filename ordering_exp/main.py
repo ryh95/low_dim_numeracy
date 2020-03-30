@@ -5,7 +5,7 @@ from model import LogisticLoss, AxisOrdering
 from ordering_exp.helper.experiments import OrderdingExp
 from ordering_exp.helper.minimizer import Minimizer
 
-k = 1
+k = 5
 
 exp_type = 'ord-'+str(k)
 num_src = 'nums1-3'
@@ -18,7 +18,7 @@ exps = []
 
 base_workspace = {
     'train_verbose':True,
-    'n_epochs':50,
+    'n_epochs':400,
     'mini_batch_size':256,
     'emb_dim':300,
     'model':model,
