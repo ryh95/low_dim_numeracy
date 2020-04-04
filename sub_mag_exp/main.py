@@ -18,7 +18,8 @@ elif exp_type == 'sc':
 else:
     assert False
 
-emb_types = ['word2vec-wiki','word2vec-giga', 'glove-wiki', 'glove-giga', 'fasttext-wiki', 'fasttext-giga']
+emb_types = ['word2vec-wiki', 'word2vec-giga', 'glove-wiki', 'glove-giga', 'fasttext-wiki', 'fasttext-giga','random']
+# emb_types = ['glove-giga']
 exps = []
 
 base_workspace = {
@@ -30,7 +31,7 @@ base_workspace = {
     'mapping_type':'subspace',
     # 'subspace_dim':160,
     'loss': LogisticLoss,
-    'loss_params':{'beta':18},
+    # 'loss_params':{'beta':18},
     'save_model': False,
     'select_inter_model':False,
     # 'eval_data': ['val'],
@@ -39,7 +40,7 @@ base_workspace = {
     'distance_metric':'cosine'
 }
 mini_func = gp_minimize
-optimize_types = ['subspace_dim','lr']
+optimize_types = ['loss__beta','subspace_dim','lr']
 # optimize_types = ['n_hidden1','n_out','lr']
 minimizer = Minimizer(base_workspace, optimize_types, mini_func)
 

@@ -1,3 +1,4 @@
+import os
 import pickle
 from os.path import join, isfile
 
@@ -29,13 +30,21 @@ class SubspaceMagExp(object):
         fX_splits = [fX + '_' + type for type in ['train', 'dev', 'test']] # nums1-3_sc-k_train
 
         # prepare train dev test split
-        print('prepare train dev and test')
-        X = np.load(join(SUB_MAG_EXP_DIR, 'data', fX + '.npy'), allow_pickle=True)
-        X_train, X_test = train_test_split(X, test_size=0.2)
-        X_train, X_val = train_test_split(X_train, test_size=0.1875)
-        X_splits = [X_train, X_val, X_test]
-        for name, data in zip(fX_splits, X_splits):
-            np.save(name, data)
+        if os.path.exists(fX_splits[0] + '.npy'):
+            # if train dev test split exists
+            print('load train dev and test')
+            X_train = np.load(fX_splits[0] + '.npy', allow_pickle=True)
+            X_val = np.load(fX_splits[1] + '.npy', allow_pickle=True)
+            X_test = np.load(fX_splits[2] + '.npy', allow_pickle=True)
+            X_splits = [X_train, X_val, X_test]
+        else:
+            print('prepare train dev and test')
+            X = np.load(join(SUB_MAG_EXP_DIR, 'data', fX + '.npy'), allow_pickle=True)
+            X_train, X_test = train_test_split(X, test_size=0.2)
+            X_train, X_val = train_test_split(X_train, test_size=0.1875)
+            X_splits = [X_train, X_val, X_test]
+            for name, data in zip(fX_splits, X_splits):
+                np.save(name, data)
 
         # standardize number embeddings and prepare train/dev/test embedding
         embs = []
@@ -69,7 +78,7 @@ class SubspaceMagExp(object):
         # if 'random' in femb:
         #     emb_conf['dim'] = 300
         # emb_conf['emb_fname'] = femb
-        testset = load_batched_samples(X_test, num_emb_st, pre_emb=False)
+        testset = load_batched_samples(X_test, num_emb_st)
         orig_test_acc = init_evaluate(testset, cosine_distance)
         print('test acc in original space of %s: %.4f' % (emb_type, orig_test_acc))
 
@@ -77,7 +86,7 @@ class SubspaceMagExp(object):
         datasets = []
         for X_split in X_splits:
             # load train val test dataset
-            datasets.append(load_batched_samples(X_split, num_emb_st, pre_emb=False))
+            datasets.append(load_batched_samples(X_split, num_emb_st))
 
         minimizer.base_workspace['train_data'] = datasets[0]
         minimizer.base_workspace['val_data'] = datasets[1]
@@ -88,12 +97,13 @@ class SubspaceMagExp(object):
         minimizer.base_workspace['eval_data'] = ['val']
 
         # optimize space
-        space = [Integer(2, 256),
+        space = [Integer(2,20),
+                 Integer(2, 256),
                  Real(10 ** -5, 10 ** 0, "log-uniform"),
                  ]
 
         # x0 = [128,64,6,0.001]
-        x0 = [160, 0.0025]
+        x0 = [18, 160, 0.0025]
         res = minimizer.minimize(space, x0=x0, n_calls=50, verbose=True)
 
 

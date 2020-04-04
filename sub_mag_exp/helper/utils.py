@@ -44,7 +44,6 @@ def load_batched_samples(X, num_emb, pre_emb=True):
         P_xp = torch.cat(P_xp)
         P_xms = torch.cat(P_xms)
         batched_samples = TensorDataset(P_x, P_xp, P_xms)
-        batched_samples.number_emb_source = num_emb['emb_fname']
     return batched_samples
 
 def init_evaluate(dataset,distance_metric):
@@ -249,6 +248,7 @@ def prepare_ova_with_sc(fX_sc):
     X_sc = np.load(join(SUB_MAG_EXP_DIR,'data',fX_sc+'.npy'),allow_pickle=True)
     number_set = set(np.array(X_sc).flat)
     number_array = sorted(number_set, key=lambda x: float(x))
+    # max_num = number_array[-1]
     l_number_array = len(number_array)
     X_ova = np.empty((l_number_array,l_number_array-2,3),dtype=np.object)
     valid_id = np.ones(l_number_array)
@@ -271,8 +271,10 @@ def prepare_ova_with_sc(fX_sc):
             xm = n_l1
         else:
             # resolve the boundary case
-            xp = random.choice([n_l1,n_r1])
+            # xp = random.choice([n_l1,n_r1])
+            xp = n_l1
             xm = random.sample(remain_numbers,1)[0]
+            # xm = max_num
 
         valid_test = 1
         for j,m in enumerate(list(remain_numbers) + [xm]):
@@ -334,13 +336,40 @@ def prepare_ova_with_sc(fX_sc):
 def prepare_sc_k_with_ova(fX_ova, k=100):
 
     X_ova = np.load(join(SUB_MAG_EXP_DIR, 'data', fX_ova+'.npy'), allow_pickle=True)  # B x n-2 x 3
-    X_ova_fl = X_ova.astype(np.float)
-    diff = np.abs(X_ova_fl[:, :, 0] - X_ova_fl[:, :, 2])  # B x n-2
-    # get the id of the first k smallest
-    # ref: https://stackoverflow.com/a/34226816/6609622
-    idx = np.argpartition(diff, k)[:, :k]  # B x k
-    # index the first k elements
-    # ref: https://stackoverflow.com/a/48997870
-    X_sc_k = X_ova[np.arange(len(idx))[:, None], idx]  # B x k x 3
+    number_array = sorted(set(X_ova.flat), key=lambda x: float(x))
+    # in order to remove the duplicate in the sc-k,
+    X_sc_k = np.empty((X_ova.shape[0],k,3),dtype=np.object)
+
+    for i in range(1,X_ova.shape[0]-1): # skip the first and last
+        X_ova_i = X_ova[i,:,:] # n-2 x 3
+        n_l1 = number_array[i-1]
+        n_r1 = number_array[i+1]
+        X_ova_i_fl = X_ova_i.astype(np.float)
+        diff = np.abs(X_ova_i_fl[:, 0] - X_ova_i_fl[:, 2])  # n-2
+        if X_ova_i[-1][2] != n_l1 and X_ova_i[-1][2] != n_r1:
+            idx = np.argpartition(diff[:-1],k)[:k] # k
+        else:
+            idx = np.argpartition(diff, k)[:k]  # k
+        X_sc_k[i, :, :] = X_ova_i[idx, :]
+
+    # resolve the first and last
+    X_ova_0_fl = X_ova[0].astype(np.float)
+    diff = np.abs(X_ova_0_fl[:,0]-X_ova_0_fl[:,2]) # n-2
+    idx = np.argpartition(diff, k)[:k]  # k
+    X_sc_k[0] = X_ova[0][idx,:]
+
+    X_ova_n_fl = X_ova[-1].astype(np.float)
+    diff = np.abs(X_ova_n_fl[:, 0] - X_ova_n_fl[:, 2])  # n-2
+    idx = np.argpartition(diff, k)[:k]  # k
+    X_sc_k[-1] = X_ova[-1][idx, :]
+
+    # X_ova_fl = X_ova.astype(np.float)
+    # diff = np.abs(X_ova_fl[:, :, 0] - X_ova_fl[:, :, 2])  # B x n-2
+    # # get the id of the first k smallest
+    # # ref: https://stackoverflow.com/a/34226816/6609622
+    # idx = np.argpartition(diff, k)[:, :k]  # B x k
+    # # index the first k elements
+    # # ref: https://stackoverflow.com/a/48997870
+    # X_sc_k = X_ova[np.arange(len(idx))[:, None], idx]  # B x k x 3
     np.save(join(SUB_MAG_EXP_DIR,'data','_'.join(fX_ova.split('_')[:-1] + ['sc-k'])), X_sc_k)
     return X_sc_k

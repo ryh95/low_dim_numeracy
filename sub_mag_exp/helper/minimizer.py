@@ -18,7 +18,14 @@ class Minimizer(object):
 
     def objective(self, feasible_point):
 
-        optimize_workspace = {type:type_values for type,type_values in zip(self.optimize_types,feasible_point)}
+        # optimize_workspace = {type:type_values for type,type_values in zip(self.optimize_types,feasible_point)}
+        loss_params, optimize_workspace = {}, {}
+        for type, type_values in zip(self.optimize_types, feasible_point):
+            if type.startswith('loss__'):
+                loss_params[type[len('loss__'):]] = type_values
+                continue
+            optimize_workspace[type] = type_values
+        optimize_workspace['loss_params'] = loss_params
 
         # combine two workspace
         workspace = {**self.base_workspace,**optimize_workspace}

@@ -1,3 +1,4 @@
+import pickle
 from os.path import join
 
 from sklearn.model_selection import train_test_split
@@ -5,35 +6,32 @@ from sklearn.preprocessing import StandardScaler
 import numpy as np
 from termcolor import colored
 
-from ..config import VOCAB_DIR
-from .utils import load_num_emb
-from .experiment import MagnitudeAxisExperiments
+from axis_mag_exp.experiment import MagnitudeAxisExperiments
+from config import VOCAB_DIR, EMB_DIR
 
 fembs = ['word2vec-wiki','word2vec-giga','glove-wiki','glove-giga','fasttext-wiki','fasttext-giga','random']
 test_models = ['ridge','kernel_ridge','kernel_ridge_separation']
-sel_nums = np.load(join(VOCAB_DIR,'nums2.npy'))
+nums_name = 'nums2'
+nums = np.load(join(VOCAB_DIR, nums_name + '.npy'))
 n_trials = 10
 results = np.zeros((n_trials,len(fembs),len(test_models)))
 
 for i in range(n_trials):
 
-    sel_nums_train,sel_nums_test = train_test_split(sel_nums,test_size=0.2)
+    sel_nums_train,sel_nums_test = train_test_split(nums, test_size=0.2)
     sel_nums_train,sel_nums_val = train_test_split(sel_nums_train,test_size=0.1875)
 
     for j,femb in enumerate(fembs):
 
-        if femb == 'random':
-            X_train = np.random.randn(len(sel_nums_train),300)
-            y_train = np.array(sel_nums_train,dtype=float)
-            X_val = np.random.randn(len(sel_nums_val), 300)
-            y_val = np.array(sel_nums_val, dtype=float)
-            X_test = np.random.randn(len(sel_nums_test), 300)
-            y_test = np.array(sel_nums_test, dtype=float)
-        else:
-            X_ys = []
-            for sel_nums_split in [sel_nums_train,sel_nums_val,sel_nums_test]:
-                X_ys += list(load_num_emb(femb,sel_nums_split))
-            X_train,y_train,X_val,y_val,X_test,y_test = X_ys
+        with open(join(EMB_DIR, nums_name + '_' + femb + '.pkl'), 'rb') as f:
+            num_emb = pickle.load(f)
+
+        Xs,ys = [],[]
+        for sel_nums_split in [sel_nums_train,sel_nums_val,sel_nums_test]:
+            Xs.append(np.stack([num_emb[num] for num in sel_nums_split]))
+            ys.append(sel_nums_split.astype(np.float))
+        X_train,X_val,X_test = Xs
+        y_train,y_val,y_test = ys
 
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X_train)

@@ -29,7 +29,7 @@ class BaseDataset(Dataset):
         self.X = X
 
     def __len__(self):
-        return len(self.X)
+        return self.X.shape[0]
 
 class OVADataset(BaseDataset):
 
@@ -43,7 +43,7 @@ class OVADataset(BaseDataset):
         # see ref
         # https://pytorch.org/docs/stable/data.html
         test_sample = self.X[idx]
-        n_ova = len(test_sample)
+        n_ova = test_sample.shape[0]
         d = next(iter(self.number_emb.values())).numel()
         P_xms = torch.zeros(n_ova, d, dtype=torch.float32)
         for i,(x,xp,xm) in enumerate(test_sample):
