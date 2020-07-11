@@ -1,6 +1,6 @@
 import io
 import pickle
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from os.path import join, splitext
 
 import numpy as np
@@ -94,9 +94,17 @@ def vocab2vec(vocab, output_dir, output_name, fword_emb, savefmt, type='glove', 
         print('%d words in vocab, %d words not found in word embedding file, init them with the mean vector' % (
             len_vocab, n_oov))
         vocab_vec[:, vocab_vec_ind] = np.repeat(mean_emb_vec[:,np.newaxis],n_oov,1)
+    elif oov_handle == 'none':
+        print('%d words in vocab, %d words not found in word embedding file, ignore them in the embedding' % (
+            len_vocab, n_oov))
     print('saving vocab vector file')
 
-    word2vec = {word: vocab_vec[:, id] for id, word in enumerate(vocab)}
+    if oov_handle != 'none':
+        word2vec = OrderedDict((word, vocab_vec[:, id]) for id, word in enumerate(vocab))
+    else:
+        word2vec = OrderedDict((vocab[id], vocab_vec[:, id]) for id, flag in enumerate(vocab_vec_ind) if flag == False)
+        vocab_vec = vocab_vec[:, ~vocab_vec_ind]
+
     for fmt in savefmt:
         if fmt == 'mat':
             sio.savemat(join(output_dir,output_name+'.mat'),{output_name:vocab_vec})

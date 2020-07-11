@@ -1,3 +1,5 @@
 .idea/
 __pycache__/
 data/embs/
+sub_mag_exp/data
+numeral_prediction_exp/data

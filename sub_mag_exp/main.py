@@ -2,6 +2,7 @@ from os.path import join
 
 import torch
 from skopt import gp_minimize
+from skopt.space import Integer, Real
 
 from config import SUB_MAG_EXP_DIR, EMB_DIR
 from model import OVAModel, SCModel, LogisticLoss
@@ -18,8 +19,8 @@ elif exp_type == 'sc':
 else:
     assert False
 
-emb_types = ['word2vec-wiki', 'word2vec-giga', 'glove-wiki', 'glove-giga', 'fasttext-wiki', 'fasttext-giga','random']
-# emb_types = ['glove-giga']
+# emb_types = ['word2vec-wiki', 'word2vec-giga', 'glove-wiki', 'glove-giga', 'fasttext-wiki', 'fasttext-giga','random']
+emb_types = ['word2vec-wiki']
 exps = []
 
 base_workspace = {
@@ -37,7 +38,13 @@ base_workspace = {
     # 'eval_data': ['val'],
     # 'working_status': 'optimize', # 'optimize'/ 'infer' / 'eval'
     'optimizer':torch.optim.Adam,
-    'distance_metric':'cosine'
+    'distance_metric':'cosine',
+    'hyp_tune_space' : [Integer(2,20),
+             Integer(2, 256),
+             Real(10 ** -5, 10 ** 0, "log-uniform"),
+             ],
+    'hyp_tune_x0' : [18, 160, 0.0025],
+    'hyp_tune_calls': 50
 }
 mini_func = gp_minimize
 optimize_types = ['loss__beta','subspace_dim','lr']

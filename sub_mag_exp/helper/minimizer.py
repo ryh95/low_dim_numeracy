@@ -16,7 +16,7 @@ class Minimizer(object):
         self.mini_func = mini_func
         self.optimize_types = optimize_types
 
-    def objective(self, feasible_point):
+    def prepare_workspace(self,feasible_point):
 
         # optimize_workspace = {type:type_values for type,type_values in zip(self.optimize_types,feasible_point)}
         loss_params, optimize_workspace = {}, {}
@@ -28,15 +28,11 @@ class Minimizer(object):
         optimize_workspace['loss_params'] = loss_params
 
         # combine two workspace
-        workspace = {**self.base_workspace,**optimize_workspace}
+        workspace = {**self.base_workspace, **optimize_workspace}
 
-        best_acc = -inf
+        return workspace
 
-        mini_batchs = DataLoader(workspace['train_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=0, pin_memory=True)
-        if 'val_data' in workspace:
-            mini_batchs_val = DataLoader(workspace['val_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=0, pin_memory=True)
-        if 'test_data' in workspace:
-            mini_batchs_test = DataLoader(workspace['test_data'], batch_size=workspace['mini_batch_size'], shuffle=True, num_workers=0, pin_memory=True)
+    def prepare_models(self,workspace):
 
         if workspace['mapping_type'] == 'subspace':
             mapping_model = SubspaceMapping(workspace['subspace_dim'], workspace['emb_dim'])
@@ -53,36 +49,39 @@ class Minimizer(object):
             loss = self.loss()
 
         model = self.model(mapping_model,workspace['distance_metric'],loss)
+        # model = self.model(mapping_model,workspace['distance_metric'],loss,workspace['lamb'])
+        return model
 
-        if 'val_data' in workspace:
-            # init evaluate
-            print('evaluate on val data')
-            evaluate_acc, _ = model.evaluate(mini_batchs_val)
-            print(evaluate_acc)
-
-        # acc, loss = ova_model.evaluate(mini_batchs)
-        # print('init specialized acc: ', acc)
+    def train(self,workspace,model,data):
 
         # SGD performs poorly, the reason is not clear
         # optimizer = torch.optim.SGD([W],lr,momentum=0.9)
         optimizer = self.optimizer(model.parameters(), workspace['lr'])
-
+        mini_batchs = DataLoader(data, batch_size=workspace['mini_batch_size'], shuffle=True,
+                                 num_workers=0, pin_memory=True)
+        best_acc = -inf
         for t in range(workspace['n_epochs']):
 
             if workspace['train_verbose']:
                 print('epoch number: ', t)
                 start = time.time()
 
-            for i,mini_batch in enumerate(mini_batchs):
+            for i, mini_batch in enumerate(mini_batchs):
 
                 mini_P_x, mini_P_xp, mini_P_xms = mini_batch
+                # mini_emb = torch.stack(
+                #     [workspace['train_data'].number_emb[n] for n in workspace['train_data'].mini_nums])
+                # workspace['train_data'].mini_nums = set()
 
                 mini_P_x = mini_P_x.to(model.device)  # can set non_blocking=True
                 mini_P_xp = mini_P_xp.to(model.device)
                 mini_P_xms = mini_P_xms.to(model.device)
+                # mini_emb = mini_emb.to(model.device)
 
-                dp,dm = model(mini_P_x, mini_P_xp, mini_P_xms)
-                loss,acc = model.criterion(dp,dm)
+                # dp, dm, norm_ratio = model(mini_P_x, mini_P_xp, mini_P_xms, mini_emb)
+                dp, dm = model(mini_P_x, mini_P_xp, mini_P_xms)
+                # loss, acc = model.criterion2(dp, dm)
+                loss, acc = model.criterion(dp, dm)
 
                 print(acc)
 
@@ -97,23 +96,24 @@ class Minimizer(object):
                 if workspace['select_inter_model']:
                     if i % 5 == 0:
                         if acc.item() > best_acc:
-                            best_W = model.W.data.clone()
+                            model.mapping.best_W = model.mapping.W.data.clone()
                             best_acc = acc.item()
                             if workspace['train_verbose']:
                                 print('specialized acc: ', best_acc)
 
                 optimizer.step()
 
-                if isinstance(mapping_model,SubspaceMapping):
+                if isinstance(model.mapping, SubspaceMapping):
                     model.mapping.project()
                     # print(model.mapping.W)
 
             if workspace['train_verbose']:
-                print("train: ", time.time() - start)
+                print("train time per epoch: ", time.time() - start)
 
-        # print("Deviation from the constraint: ",torch.norm(best_W.T @ best_W - torch.eye(dim).to(device)).item())
+    def save_models(self,workspace,model):
+
         if workspace['select_inter_model']:
-            model.W = torch.nn.Parameter(best_W)
+            model.mapping.W = torch.nn.Parameter(model.mapping.best_W)
         if workspace['save_model']:
             if 'loss_params' in workspace:
                 loss_str = '_'.join([str(k) + '_' + str(v) for k, v in workspace['loss_params'].items()])
@@ -132,18 +132,21 @@ class Minimizer(object):
             else:
                 assert False
             torch.save(model.state_dict(),fname)
+
+    def get_objective(self,workspace,model):
+
         evaluate_accs = {}
         for data in workspace['eval_data']:
             if data == 'val':
                 print('evaluate on validation set')
                 # print(model.mapping.W)
-                evaluate_acc, _ = model.evaluate(mini_batchs_val)
+                evaluate_acc, _ = model.evaluate(workspace['val_data'])
             elif data == 'train':
                 print('evaluate on training set')
-                evaluate_acc, evaluate_loss = model.evaluate(mini_batchs)
+                evaluate_acc, evaluate_loss = model.evaluate(workspace['train_data'])
             elif data == 'test':
                 print('evaluate on test set')
-                evaluate_acc, evaluate_loss = model.evaluate(mini_batchs_test)
+                evaluate_acc, evaluate_loss = model.evaluate(workspace['test_data'])
             evaluate_accs[data] = evaluate_acc
 
         # print(workspace['working_status'])
@@ -154,6 +157,28 @@ class Minimizer(object):
         elif workspace['working_status'] == 'eval':
             return evaluate_accs
 
+    def objective(self, feasible_point):
+
+        workspace = self.prepare_workspace(feasible_point)
+
+        model = self.prepare_models(workspace)
+
+        # if 'val_data' in workspace:
+        #     # init evaluate
+        #     print('evaluate on val data')
+        #     evaluate_acc, _ = model.evaluate(workspace['val_data'])
+        #     print(evaluate_acc)
+
+        self.train(workspace,model,workspace['train_data'])
+
+        self.save_models(workspace,model)
+
+        return self.get_objective(workspace,model)
+
     def minimize(self,space,**min_args):
 
         return self.mini_func(self.objective, space, **min_args)
+
+class RegularizedMinimizer(Minimizer):
+
+    pass

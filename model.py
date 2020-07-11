@@ -5,6 +5,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.nn.modules.loss import _Loss
+from torch.utils.data import DataLoader
 
 
 class NeuralNetworkMapping(nn.Module):
@@ -58,6 +59,9 @@ class SubspaceMapping(nn.Module):
         # Bxd / B x n-2 x d
         # return shape Bxs / B x n-2 x s
         return x @ self.W
+
+    def forward2origin(self, x):
+        return x @ self.W @ self.W.T
 
 class AxisMapping(nn.Module):
 
@@ -119,11 +123,10 @@ class SubspaceMag(nn.Module):
 
         return loss,acc
 
-
-    def evaluate(self,data_batches):
+    def evaluate(self, data):
         """
         evaluate W on data_batches, i.e., all data in data batches
-        :param data_batches:
+        :param data: dataset of torch.utils.data
         :return:
         """
         losses, accs = [],[]
@@ -131,7 +134,8 @@ class SubspaceMag(nn.Module):
         # num_mini_batches = 0
 
         # print(self.mapping.W)
-
+        data_batches = DataLoader(data, batch_size=256, shuffle=True, num_workers=0,
+                   pin_memory=True)
         for mini_batch in data_batches:
             mini_P_x, mini_P_xp, mini_P_xms = mini_batch
 
@@ -165,6 +169,26 @@ class OVAModel(SubspaceMag):
         dm = torch.min(self.distance(map_min_P_x[:,:,None],map_min_P_xms.transpose(1,2)),dim=1)[0]
 
         return dp,dm
+
+class RegularizedOVAModel(OVAModel):
+
+    def __init__(self, mapping_model, distance_type, loss, lamb):
+        super(RegularizedOVAModel, self).__init__(mapping_model, distance_type, loss)
+        self.lamb = lamb
+
+    def forward2(self,mini_P_x, mini_P_xp, mini_P_xms, mini_emb):
+        dp,dm = self.forward(mini_P_x, mini_P_xp, mini_P_xms)
+        mini_emb_subspace_origin = self.mapping.forward2origin(mini_emb)  # B'xd
+        norm_ratio = torch.norm(mini_emb_subspace_origin, dim=1) / torch.norm(mini_emb, dim=1)
+
+        return dp,dm,norm_ratio
+
+    def criterion2(self, dp, dm, norm_ratio):
+        objs = self.loss(dp - dm)
+        loss = torch.mean(objs) - self.lamb * torch.mean(norm_ratio)
+        acc = torch.mean((dp.data < dm.data).float())  # mini-batch acc, batch size is same as dp/dm
+
+        return loss,acc
 
 class SCModel(SubspaceMag):
 

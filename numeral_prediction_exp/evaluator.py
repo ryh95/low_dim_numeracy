@@ -44,7 +44,9 @@ class Evaluator(object):
             for num in inter_nums:
                 pos = sen.index(num)
                 SA = self.compute_SA(pos,sen,window_size)
-                if SA is None: continue
+                if SA is None:
+                    print('SA is none, continue')
+                    continue
                 pred_num = self.id2num[torch.argmax(SA).item()]
                 ei = abs(float(num) - float(pred_num))
                 if num == '0' or num == '0.0': continue
