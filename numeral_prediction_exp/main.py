@@ -42,9 +42,9 @@ projected_num_emb_dict = OrderedDict((k,projected_num_emb[i,:].cpu().numpy()) fo
 
 # compare original embedding with our projected embedding using evaluator
 evaluator = Evaluator(emb_dict, num_emb_dict)
-MdAE, MdAPE, AVGR = evaluator.evaluate_SA(nums, sens, 5)
+MdAE, MdAPE, AVGR = evaluator.evaluate(nums, sens, 5)
 print(MdAE,MdAPE,AVGR)
 
 evaluator = Evaluator(emb_dict, projected_num_emb_dict)
-MdAE, MdAPE, AVGR = evaluator.evaluate_SA(nums, sens, 5)
+MdAE, MdAPE, AVGR = evaluator.evaluate(nums, sens, 5)
 print(MdAE,MdAPE,AVGR)

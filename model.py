@@ -115,49 +115,13 @@ class SubspaceMag(nn.Module):
         elif distance_type == 'cosine':
             self.distance = lambda x,y: 1 - F.cosine_similarity(x,y)
 
-    def criterion(self,dp,dm):
+    def get_loss(self, dp, dm):
 
         objs = self.loss(dp - dm)
         loss = torch.mean(objs)
         acc = torch.mean((dp.data < dm.data).float())  # mini-batch acc, batch size is same as dp/dm
 
         return loss,acc
-
-    def evaluate(self, data):
-        """
-        evaluate W on data_batches, i.e., all data in data batches
-        :param data: dataset of torch.utils.data
-        :return:
-        """
-        losses, accs = [],[]
-        # start = time.time()
-        # num_mini_batches = 0
-
-        # print(self.mapping.W)
-        data_batches = DataLoader(data, batch_size=256, shuffle=True, num_workers=0,
-                   pin_memory=True)
-        for mini_batch in data_batches:
-            mini_P_x, mini_P_xp, mini_P_xms = mini_batch
-
-            mini_P_x = mini_P_x.to(self.device)  # can set non_blocking=True
-            mini_P_xp = mini_P_xp.to(self.device)
-            mini_P_xms = mini_P_xms.to(self.device)
-
-            dp, dm = self.forward(mini_P_x, mini_P_xp, mini_P_xms)
-            objs = self.loss(dp.data - dm.data)
-            loss = torch.sum(objs)
-            acc = torch.sum((dp.data < dm.data).float())
-
-            print(acc)
-
-            losses.append(loss)
-            accs.append(acc)
-            # num_mini_batches += 1
-        # print(num_mini_batches)
-        # print("evaluate: ", time.time() - start)
-        loss = torch.sum(torch.stack(losses))/len(data_batches.dataset)
-        acc = torch.sum(torch.stack(accs))/len(data_batches.dataset)
-        return acc.item(),loss.item()
 
 class OVAModel(SubspaceMag):
 
@@ -176,14 +140,16 @@ class RegularizedOVAModel(OVAModel):
         super(RegularizedOVAModel, self).__init__(mapping_model, distance_type, loss)
         self.lamb = lamb
 
-    def forward2(self,mini_P_x, mini_P_xp, mini_P_xms, mini_emb):
-        dp,dm = self.forward(mini_P_x, mini_P_xp, mini_P_xms)
+    def forward(self,mini_P_x, mini_P_xp, mini_P_xms, mini_emb=None):
+        # https: // stackoverflow.com / a / 54155637 / 6609622
+        # https: // stackoverflow.com / a / 805081 / 6609622
+        dp,dm = super().forward(mini_P_x, mini_P_xp, mini_P_xms)
         mini_emb_subspace_origin = self.mapping.forward2origin(mini_emb)  # B'xd
         norm_ratio = torch.norm(mini_emb_subspace_origin, dim=1) / torch.norm(mini_emb, dim=1)
 
         return dp,dm,norm_ratio
 
-    def criterion2(self, dp, dm, norm_ratio):
+    def get_loss(self, dp, dm, norm_ratio=None):
         objs = self.loss(dp - dm)
         loss = torch.mean(objs) - self.lamb * torch.mean(norm_ratio)
         acc = torch.mean((dp.data < dm.data).float())  # mini-batch acc, batch size is same as dp/dm

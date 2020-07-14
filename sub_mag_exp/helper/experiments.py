@@ -10,17 +10,33 @@ from skopt.space import Integer, Real
 from torch.utils.data import ConcatDataset
 
 from config import DATA_DIR, EMB_DIR, SUB_MAG_EXP_DIR
+from experiments import BaseExperiments
 from sub_mag_exp.helper.utils import load_batched_samples, init_evaluate
 from utils import vocab2vec, cosine_distance
 
 
-class SubspaceMagExp(object):
+class SubspaceMagExp(BaseExperiments):
 
-    def __init__(self, exp_name, exp_data):
-        self.name = exp_name
-        self.exp_data = exp_data
+    def prepare_datasets(self):
+        self.num_src = self.exp_data['num_src']  # nums1-3
+        self.emb_type = self.exp_data['emb_type']  # word2vec-wiki
+        self.exp_type = self.exp_data['exp_type']  # sc-k
+        self.minimizer = self.exp_data['minimizer']
 
-    def prepare_train_dev_test_split(self):
+        self.fX = self.num_src + '_' + self.exp_type  # nums1-3_sc-k
+        self.fX_splits = [self.fX + '_' + type for type in ['train', 'dev', 'test']]  # nums1-3_sc-k_train
+
+        # prepare train dev test split
+        # todo: should we standardize number embeddings? i.e. call standardize_train_dev_test_emb?
+        with open(join(EMB_DIR, self.num_src + '_' + self.emb_type + '.pkl'), 'rb') as f:  # nums1-3_word2vec-wiki.pkl
+            self.num_emb = pickle.load(f)
+        self.X_splits = self.train_dev_test_split()
+        self.datasets = {}
+        for X_split, split_type in zip(self.X_splits, ['train', 'val', 'test']):
+            # load train val test dataset
+            self.datasets[split_type] = load_batched_samples(X_split, self.num_emb)
+
+    def train_dev_test_split(self):
 
         if os.path.exists(self.fX_splits[0] + '.npy'):
             # if train dev test split exists
@@ -67,85 +83,59 @@ class SubspaceMagExp(object):
         with open(self.num_src+'_'+self.emb_type+'_st.pkl', 'wb') as handle: # nums1-3_word2vec-wiki_st.pkl
             pickle.dump(num_emb_st, handle,protocol=pickle.HIGHEST_PROTOCOL)
 
-    def show_original_acc(self,num_emb,X_test):
+        return num_emb_st
+
+    def show_benchmark_res(self):
 
         # emb_conf = {}self.
         # if 'random' in femb:
         #     emb_conf['dim'] = 300
         # emb_conf['emb_fname'] = femb
-        testset = load_batched_samples(X_test, num_emb)
-        orig_test_acc = init_evaluate(testset, cosine_distance)
-        print('test acc in original space of %s: %.4f' % (self.emb_type, orig_test_acc))
-        return orig_test_acc
+        self.res['orig_test_res'] = init_evaluate(self.datasets['test'], cosine_distance)
+        print('test acc in original space of %s: %.4f' % (self.emb_type, self.res['orig_test_res']))
 
-    def show_subspace_acc(self,num_emb,X_splits,minimizer):
+    def show_model_res(self):
 
-        datasets = []
-        for X_split in X_splits:
-            # load train val test dataset
-            datasets.append(load_batched_samples(X_split, num_emb))
-
-        minimizer.base_workspace['train_data'] = datasets[0]
-        minimizer.base_workspace['val_data'] = datasets[1]
-        if 'test_data' in minimizer.base_workspace:
-            del minimizer.base_workspace['test_data']
-
-        minimizer.base_workspace['working_status'] = 'optimize'
-        minimizer.base_workspace['eval_data'] = ['val']
+        self.minimizer.base_workspace['train_data'] = self.datasets['train']
+        self.minimizer.evaluator.eval_data = self.datasets['val']
 
         # optimize
-        hpy_tune_space = minimizer.base_workspace['hyp_tune_space']
-        x0 = minimizer.base_workspace['hyp_tune_x0']
-        n_calls = minimizer.base_workspace['hyp_tune_calls']
-        res = minimizer.minimize(hpy_tune_space, x0=x0, n_calls=n_calls, verbose=True)
+        hpy_tune_space = self.minimizer.base_workspace['hyp_tune_space']
+        x0 = self.minimizer.base_workspace['hyp_tune_x0']
+        n_calls = self.minimizer.base_workspace['hyp_tune_calls']
+        res = self.minimizer.minimize(hpy_tune_space, x0=x0, n_calls=n_calls, verbose=True)
 
         # train on the train and dev sets and then test on test sets
-        minimizer.base_workspace['train_data'] = ConcatDataset([datasets[0], datasets[1]])
-        del minimizer.base_workspace['val_data']
-        minimizer.base_workspace['test_data'] = datasets[2]
+        self.minimizer.base_workspace['train_data'] = ConcatDataset([self.datasets['train'], self.datasets['val']])
+        self.minimizer.evaluator.eval_data = self.datasets['test']
 
-        minimizer.base_workspace['working_status'] = 'infer'
-        minimizer.base_workspace['eval_data'] = ['test']
-        minimizer.base_workspace['save_model'] = True
+        self.minimizer.base_workspace['save_model'] = True
 
-        test_acc = minimizer.objective(res.x)
+        test_acc = -self.minimizer.objective(res.x)
         print('test acc: %f' % (test_acc))
-        return test_acc,res
 
-    def save_res(self,minimizer_res,orig_test_acc, test_acc):
+        self.res['test_res'] = test_acc
+        self.res['minimizer_res'] = res
 
-        results_fname = '_'.join(['res-hyp', self.name])
-        dump(minimizer_res, results_fname + '.pkl', store_objective=False)
-        np.save('_'.join(['res-acc', self.name]), np.array([orig_test_acc, test_acc]))
+    def save_res(self):
+        if 'minimizer_res' in self.res:
+            results_fname = '_'.join(['res-hyp', self.name])
+            dump(self.res['minimizer_res'], results_fname + '.pkl', store_objective=False)
+            self.res.pop('minimizer_res')
+        with open('_'.join(['res-exp', self.name])+'.pkl','wb') as f:
+            pickle.dump(self.res,f,pickle.HIGHEST_PROTOCOL)
+
 
     def run(self):
-        self.num_src = self.exp_data['num_src'] # nums1-3
-        self.emb_type = self.exp_data['emb_type'] # word2vec-wiki
-        self.exp_type = self.exp_data['exp_type'] # sc-k
-        self.minimizer = self.exp_data['minimizer']
-
-        self.fX = self.num_src + '_' + self.exp_type # nums1-3_sc-k
-        self.fX_splits = [self.fX + '_' + type for type in ['train', 'dev', 'test']] # nums1-3_sc-k_train
-
-        # prepare train dev test split
-        X_splits = self.prepare_train_dev_test_split()
-
-        # todo: should we standardize number embeddings? i.e. call standardize_train_dev_test_emb?
-        with open(join(EMB_DIR, self.num_src + '_' + self.emb_type + '.pkl'), 'rb') as f:  # nums1-3_word2vec-wiki.pkl
-            num_emb = pickle.load(f)
+        self.prepare_datasets()
 
         # show accuracy of test set in original space
-        X_test = X_splits[-1]
-        orig_test_acc = self.show_original_acc(num_emb,X_test)
+        self.show_benchmark_res()
 
         # show accuracy of test set in subspace
-        test_acc,minimizer_res = self.show_subspace_acc(num_emb,X_splits,self.minimizer)
+        self.show_model_res()
 
         # save results
-        self.save_res(minimizer_res,orig_test_acc, test_acc)
+        self.save_res()
 
-        return orig_test_acc,test_acc
-
-class RegularizedSubspaceMagExp(SubspaceMagExp):
-
-    pass
+        return self.res

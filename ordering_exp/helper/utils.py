@@ -48,7 +48,7 @@ def init_evaluate(dataset,average_times):
     if isinstance(dataset,TensorDataset):
         d = dataset.tensors[0].shape[1]
     elif isinstance(dataset,OrdDataset):
-        d = next(iter(dataset.number_emb.values())).numel()
+        d = next(iter(dataset.number_emb_dict.values())).numel()
     total_accs = []
     for _ in range(average_times):
         model = AxisOrdering(AxisMapping(d),LogisticLoss(1)) # beta is arbitrarily chosen

@@ -77,7 +77,7 @@ class Minimizer(object):
                 mini_P_xms = mini_P_xms.to(model.device)
 
                 ap,am = model(mini_P_x, mini_P_xms)
-                loss,acc = model.criterion(ap,am)
+                loss,acc = model.get_loss(ap, am)
 
                 print(acc)
 

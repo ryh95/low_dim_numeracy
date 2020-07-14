@@ -4,17 +4,15 @@ import torch
 from skopt import gp_minimize
 from skopt.space import Integer, Real
 
-from config import SUB_MAG_EXP_DIR, EMB_DIR
-from model import OVAModel, SCModel, LogisticLoss
-from sub_mag_exp.helper.evaluate import SubspaceMagEvaluator
-from sub_mag_exp.helper.experiments import SubspaceMagExp
-from sub_mag_exp.helper.minimizer import Minimizer
+from model import SCModel, LogisticLoss, RegularizedOVAModel
+from numeral_prediction_exp.helper.experiments import RegualarizedSubspacePrediction
+from numeral_prediction_exp.helper.minimizer import PredictionMinimizer
 
 exp_type = 'sc-k'
 num_src = 'nums1-3'
 
 if exp_type == 'ova' or exp_type == 'sc-k':
-    model = OVAModel
+    model = RegularizedOVAModel
 elif exp_type == 'sc':
     model = SCModel
 else:
@@ -30,7 +28,7 @@ base_workspace = {
     'mini_batch_size':256,
     'emb_dim':300,
     'model':model,
-    'model_type':'normal', # regularized
+    'model_type':'regularized', # regularized
     'mapping_type':'subspace',
     # 'subspace_dim':160,
     'loss': LogisticLoss,
@@ -44,26 +42,26 @@ base_workspace = {
     'hyp_tune_space' : [Integer(2,20),
              Integer(2, 256),
              Real(10 ** -5, 10 ** 0, "log-uniform"),
+             Real(0,1)
              ],
-    'hyp_tune_x0' : [18, 160, 0.0025],
+    'hyp_tune_x0' : [18, 160, 0.0025, 0.4],
     'hyp_tune_calls': 50
 }
 mini_func = gp_minimize
-optimize_types = ['loss__beta','subspace_dim','lr']
+optimize_types = ['loss__beta','subspace_dim','lr','lamb']
 # optimize_types = ['n_hidden1','n_out','lr']
-minimizer = Minimizer(base_workspace, optimize_types, mini_func)
-evaluator = SubspaceMagEvaluator()
-minimizer.evaluator = evaluator
+minimizer = PredictionMinimizer(base_workspace, optimize_types, mini_func)
 
 for emb_type in emb_types:
     exp_data = {
         'num_src': num_src,
         'emb_type': emb_type,
         'exp_type': exp_type,
-        'minimizer': minimizer
+        'minimizer': minimizer,
+        'window_size': 5
     }
     exp_name = '_'.join([num_src, exp_type, emb_type])
-    exp = SubspaceMagExp(exp_name, exp_data)
+    exp = RegualarizedSubspacePrediction(exp_name, exp_data)
     exps.append(exp)
 
 for exp in exps:

@@ -48,8 +48,12 @@ class Minimizer(object):
         else:
             loss = self.loss()
 
-        model = self.model(mapping_model,workspace['distance_metric'],loss)
-        # model = self.model(mapping_model,workspace['distance_metric'],loss,workspace['lamb'])
+        if self.base_workspace['model_type'] == 'normal':
+            model = self.model(mapping_model,workspace['distance_metric'],loss)
+        elif self.base_workspace['model_type'] == 'regularized':
+            model = self.model(mapping_model,workspace['distance_metric'],loss,workspace['lamb'])
+        else:
+            assert False
         return model
 
     def train(self,workspace,model,data):
@@ -69,19 +73,21 @@ class Minimizer(object):
             for i, mini_batch in enumerate(mini_batchs):
 
                 mini_P_x, mini_P_xp, mini_P_xms = mini_batch
-                # mini_emb = torch.stack(
-                #     [workspace['train_data'].number_emb[n] for n in workspace['train_data'].mini_nums])
-                # workspace['train_data'].mini_nums = set()
 
                 mini_P_x = mini_P_x.to(model.device)  # can set non_blocking=True
                 mini_P_xp = mini_P_xp.to(model.device)
                 mini_P_xms = mini_P_xms.to(model.device)
-                # mini_emb = mini_emb.to(model.device)
 
-                # dp, dm, norm_ratio = model(mini_P_x, mini_P_xp, mini_P_xms, mini_emb)
-                dp, dm = model(mini_P_x, mini_P_xp, mini_P_xms)
-                # loss, acc = model.criterion2(dp, dm)
-                loss, acc = model.criterion(dp, dm)
+                if self.base_workspace['model_type'] == 'regularized':
+                    mini_emb = workspace['train_data'].number_emb
+                    mini_emb = mini_emb.to(model.device)
+                    dp, dm, norm_ratio = model(mini_P_x, mini_P_xp, mini_P_xms, mini_emb)
+                    loss, acc = model.get_loss(dp, dm, norm_ratio)
+                elif self.base_workspace['model_type'] == 'normal':
+                    dp, dm = model(mini_P_x, mini_P_xp, mini_P_xms)
+                    loss, acc = model.get_loss(dp, dm)
+                else:
+                    assert False
 
                 print(acc)
 
@@ -133,30 +139,6 @@ class Minimizer(object):
                 assert False
             torch.save(model.state_dict(),fname)
 
-    def get_objective(self,workspace,model):
-
-        evaluate_accs = {}
-        for data in workspace['eval_data']:
-            if data == 'val':
-                print('evaluate on validation set')
-                # print(model.mapping.W)
-                evaluate_acc, _ = model.evaluate(workspace['val_data'])
-            elif data == 'train':
-                print('evaluate on training set')
-                evaluate_acc, evaluate_loss = model.evaluate(workspace['train_data'])
-            elif data == 'test':
-                print('evaluate on test set')
-                evaluate_acc, evaluate_loss = model.evaluate(workspace['test_data'])
-            evaluate_accs[data] = evaluate_acc
-
-        # print(workspace['working_status'])
-        if workspace['working_status'] == 'optimize':
-            return -evaluate_accs['val']
-        elif workspace['working_status'] == 'infer':
-            return evaluate_accs['test']
-        elif workspace['working_status'] == 'eval':
-            return evaluate_accs
-
     def objective(self, feasible_point):
 
         workspace = self.prepare_workspace(feasible_point)
@@ -173,12 +155,10 @@ class Minimizer(object):
 
         self.save_models(workspace,model)
 
-        return self.get_objective(workspace,model)
+        acc = self.evaluator.evaluate(model)
+
+        return -acc
 
     def minimize(self,space,**min_args):
 
         return self.mini_func(self.objective, space, **min_args)
-
-class RegularizedMinimizer(Minimizer):
-
-    pass

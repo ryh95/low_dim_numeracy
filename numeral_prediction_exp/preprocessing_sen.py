@@ -17,12 +17,12 @@ for sen in doc.sentences:
     lemma_sen.append([word.lemma for word in sen.words])
 
 # remove stopwords
-from nltk.corpus import stopwords
-stop_words = set(stopwords.words('english'))
-processed_sen = deque()
-for sen in lemma_sen:
-    processed_sen.append([word for word in sen if word not in stop_words])
+# from nltk.corpus import stopwords
+# stop_words = set(stopwords.words('english'))
+# processed_sen = deque()
+# for sen in lemma_sen:
+#     processed_sen.append([word for word in sen if word not in stop_words])
 
 # save processed sentences
-with open('processed_sentences.pickle','wb') as f:
-    pickle.dump(processed_sen,f,pickle.HIGHEST_PROTOCOL)
+with open('processed_sentences_keep_stopwords.pickle','wb') as f:
+    pickle.dump(lemma_sen,f,pickle.HIGHEST_PROTOCOL)
