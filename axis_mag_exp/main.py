@@ -6,14 +6,15 @@ from sklearn.preprocessing import StandardScaler
 import numpy as np
 from termcolor import colored
 
-from axis_mag_exp.experiment import MagnitudeAxisExperiments
+from axis_mag_exp.experiments import MagnitudeAxisExperiments
 from config import VOCAB_DIR, EMB_DIR
 
-fembs = ['word2vec-wiki','word2vec-giga','glove-wiki','glove-giga','fasttext-wiki','fasttext-giga','random']
-test_models = ['ridge','kernel_ridge','kernel_ridge_separation']
+fembs = ['word2vec-wiki']
+# test_models = ['ridge','kernel_ridge','kernel_ridge_separation']
+test_models = ['pca','proj_pca','ridge']
 nums_name = 'nums2'
 nums = np.load(join(VOCAB_DIR, nums_name + '.npy'))
-n_trials = 10
+n_trials = 5
 results = np.zeros((n_trials,len(fembs),len(test_models)))
 
 for i in range(n_trials):

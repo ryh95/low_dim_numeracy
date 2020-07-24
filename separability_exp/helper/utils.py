@@ -25,7 +25,7 @@ def prepare_separation_data(femb,sample_ratio=1):
     :param femb: 'skipgram-5.txt'
     :return:
     '''
-    number_emb, word_emb = [], []
+    number_emb, word_emb, nums = [], [], []
     print('prepare fitting data...')
     with open(join(EMB_DIR, femb), 'r') as f:
         f.readline()  # skipgram or fasttext
@@ -35,18 +35,22 @@ def prepare_separation_data(femb,sample_ratio=1):
             word = word.split('_')[0]  # skipgram
             if is_number(word):
                 number_emb.append(vec)
+                nums.append(float(word))
             else:
                 word_emb.append(vec)
     #
     X_num = np.stack(number_emb)
+    nums = np.stack(nums)
     y_num = np.ones(X_num.shape[0], dtype=int)
     X_word = np.stack(word_emb)
-    y_word = -np.ones(X_word.shape[0], dtype=int)
+    # y_word = -np.ones(X_word.shape[0], dtype=int)
+    y_word = np.zeros(X_word.shape[0], dtype=int)
     if sample_ratio<=1:
         n_num = X_num.shape[0]
         ind = np.random.choice(n_num,ceil(sample_ratio*n_num),replace=False)
         X_num = X_num[ind,:]
         y_num = y_num[ind]
+        nums = nums[ind]
         n_word = X_word.shape[0]
         ind = np.random.choice(n_word,ceil(sample_ratio*n_word),replace=False)
         # ind = np.random.choice(n_word,n_num,replace=False)
@@ -64,4 +68,4 @@ def prepare_separation_data(femb,sample_ratio=1):
     # print('number embedding: ', X_num.shape)
     # print('word embedding: ', X_sample.shape)
     # return X_sample,y_sample
-    return X,y
+    return X,X_num,y,nums
