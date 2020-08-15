@@ -11,10 +11,10 @@ from config import VOCAB_DIR, EMB_DIR
 
 fembs = ['word2vec-wiki']
 # test_models = ['ridge','kernel_ridge','kernel_ridge_separation']
-test_models = ['pca','proj_pca','ridge']
+test_models = ['kernel_ridge_random','kernel_ridge_separation']
 nums_name = 'nums2'
 nums = np.load(join(VOCAB_DIR, nums_name + '.npy'))
-n_trials = 5
+n_trials = 20
 results = np.zeros((n_trials,len(fembs),len(test_models)))
 
 for i in range(n_trials):

@@ -109,7 +109,7 @@ class SubspaceMagExp(BaseExperiments):
         self.minimizer.base_workspace['train_data'] = ConcatDataset([self.datasets['train'], self.datasets['val']])
         self.minimizer.evaluator.eval_data = self.datasets['test']
 
-        self.minimizer.base_workspace['save_model'] = True
+        # self.minimizer.base_workspace['save_model'] = True
 
         test_acc = -self.minimizer.objective(res.x)
         print('test acc: %f' % (test_acc))

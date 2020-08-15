@@ -1,3 +1,4 @@
+import random
 from math import sqrt
 import numpy as np
 import skopt
@@ -52,6 +53,16 @@ class MagnitudeAxisExperiments(object):
             optimize_types = ['alpha']
             minimizer = MagnitudeAxisMinimizer(base_workspace, optimize_types, gp_minimize)
             minimizer.model_fixed_params = {'kernel': 'poly', 'degree': 3, 'gamma': 1 / 300, 'coef0': 0}
+            minimizer.model = KernelRidge
+            x0 = [1.0]
+        elif model == 'kernel_ridge_random':
+            space = [Real(1e-3, 1e+3, prior='log-uniform')]
+            optimize_types = ['alpha']
+            minimizer = MagnitudeAxisMinimizer(base_workspace, optimize_types, gp_minimize)
+            kernel = random.choice(['poly', 'rbf', 'laplacian', 'sigmoid', 'cosine'])
+            degree = random.randint(1,10)
+            coef = random.uniform(-5,5)
+            minimizer.model_fixed_params = {'kernel': kernel, 'degree': degree, 'gamma': None, 'coef0': coef}
             minimizer.model = KernelRidge
             x0 = [1.0]
         elif model == 'nn':

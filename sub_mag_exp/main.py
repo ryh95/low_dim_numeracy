@@ -20,8 +20,8 @@ elif exp_type == 'sc':
 else:
     assert False
 
-# emb_types = ['word2vec-wiki', 'word2vec-giga', 'glove-wiki', 'glove-giga', 'fasttext-wiki', 'fasttext-giga','random']
-emb_types = ['word2vec-wiki']
+emb_types = ['word2vec-wiki', 'word2vec-giga', 'glove-wiki', 'glove-giga', 'fasttext-wiki', 'fasttext-giga','random']
+# emb_types = ['word2vec-wiki']
 exps = []
 
 base_workspace = {
