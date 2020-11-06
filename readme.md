@@ -1,9 +1,7 @@
 This repository contains the code and data of the paper "[Enhancing the Numeracy of Word Embeddings:
 a Linear Algebraic Perspective](https://link.springer.com/chapter/10.1007/978-3-030-60450-9_14)"
 
-TODO:
-
-- [ ] add the introduction video of the paper
+[The video introduction of the paper](https://www.dropbox.com/s/m2fo4i6b3qn89n9/presentation.mp4?dl=0)
 
 ## How to run experiments?
 
